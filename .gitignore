@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+build/
+src/toolbar/
+
+# OS files
+.DS_Store
+*.swp
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log

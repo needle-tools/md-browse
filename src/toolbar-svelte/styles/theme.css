@@ -1,0 +1,24 @@
+  :root {
+    --ui-font: "Monaspace Xenon Var", -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, sans-serif;
+    --bg-primary: #000000;
+    --bg-secondary: #000000;
+    --bg-toolbar: #000000;
+    --bg-input: #000000;
+    --text-primary: #eaeaea;
+    --text-secondary: #a0a0a0;
+    --text-muted: #666680;
+    --accent: #484848;
+    --accent-text: #9fbc74;
+    --accent-hover: #ffffff;
+    --border: #888888;
+    --border-radius: 0x;
+    --border-radius-half: 0;
+    --tab-active: #000000;
+    --tab-hover: #1e1e35;
+    --success: #4ade80;
+    --warning: #fbbf24;
+  }
+
+  p {
+    font-size: 14px;
+  }

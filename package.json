@@ -1,0 +1,27 @@
+{
+  "name": "mdbrowse",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "A markdown-first browser that prioritizes markdown content",
+  "scripts": {
+    "build:toolbar": "cd src/toolbar-svelte && npx vite build",
+    "start": "npm run build:toolbar && electrobun build && electrobun dev",
+    "build": "npm run build:toolbar && electrobun build",
+    "dev:toolbar": "cd src/toolbar-svelte && npx vite build --watch",
+    "start:shim": "cd src/toolbar-svelte && npx vite dev"
+  },
+  "dependencies": {
+    "electrobun": "^1.2.1-beta.3",
+    "marked": "^15.0.0",
+    "turndown": "^7.2.0",
+    "turndown-plugin-gfm": "^1.0.2"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^5.0.3",
+    "@tsconfig/svelte": "^5.0.4",
+    "@types/turndown": "^5.0.5",
+    "svelte": "^5.16.0",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.7"
+  }
+}
