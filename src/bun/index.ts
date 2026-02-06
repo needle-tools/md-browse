@@ -1,4 +1,4 @@
-import { BrowserWindow, BrowserView } from "electrobun/bun";
+import { BrowserWindow, BrowserView, ApplicationMenu, Utils } from "electrobun/bun";
 import type { ToolbarRPCType, TabInfo, NavigationState, PageContent, BrowserSettings } from "../shared/types";
 import TurndownService from "turndown";
 // @ts-expect-error - turndown-plugin-gfm has no types in this project
@@ -6,6 +6,26 @@ import { gfm } from "turndown-plugin-gfm";
 import { START_PAGE_URL, START_PAGE_TITLE, START_PAGE_MARKDOWN, START_PAGE_HTML } from "../shared/start-page";
 
 console.log("[MDBrowse] Starting markdown browser...");
+
+ApplicationMenu.setApplicationMenu([
+  {
+    submenu: [{ label: "Quit", role: "quit" }],
+  },
+  {
+    label: "Edit",
+    submenu: [
+      { role: "undo" },
+      { role: "redo" },
+      { type: "separator" },
+      { role: "cut" },
+      { role: "copy" },
+      { role: "paste" },
+      { role: "pasteAndMatchStyle" },
+      { role: "delete" },
+      { role: "selectAll" },
+    ],
+  },
+]);
 
 // Initialize Turndown for HTML to Markdown conversion
 const turndown = new TurndownService({
@@ -707,12 +727,21 @@ mainWindow = new BrowserWindow({
     x: 100,
     y: 100,
   },
+  titleBarStyle: 'hiddenInset',
   styleMask: {
-    Titled: true,
+    // These are the current defaults
+    Borderless: true,
+    Titled: false,
     Closable: true,
     Miniaturizable: true,
     Resizable: true,
+    UnifiedTitleAndToolbar: true,
+    FullScreen: false,
     FullSizeContentView: false,
+    UtilityWindow: false,
+    DocModalWindow: false,
+    NonactivatingPanel: false,
+    HUDWindow: false,
   },
   rpc: mainRPC,
 });
@@ -722,6 +751,12 @@ console.log("[MDBrowse] Window created");
 // Handle window close
 mainWindow.on("close", () => {
   console.log("[MDBrowse] Window closed");
+  Utils.quit();
+  process.exit(0);
+});
+
+mainWindow.on("closed", () => {
+  Utils.quit();
   process.exit(0);
 });
 

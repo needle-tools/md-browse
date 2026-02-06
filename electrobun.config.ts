@@ -25,7 +25,7 @@ const config: ElectrobunConfig = {
     },
     mac: {
       codesign: true,
-      notarize: true,
+      notarize: false,
       bundleCEF: false,
     },
   },

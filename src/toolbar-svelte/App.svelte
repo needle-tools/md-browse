@@ -46,7 +46,6 @@
     return appStore.tabs.find((t) => t.isActive)?.id ?? null;
   }
 
-  const loadingPageHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{background:#1a1a2e;color:#eaeaea;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:system-ui}p{opacity:0.5;font-size:18px}</style></head><body><p>Loading…</p></body></html>`;
   const isStartPageUrl = (url?: string) => url === START_PAGE_URL;
 
   // Load HTML content into the content view (webview or iframe)
@@ -172,13 +171,8 @@
       loadHtmlIntoContentView(html);
     } else if (appStore.showWelcome || isStartPageUrl(url)) {
       if (!appStore.isLoading) {
-        loadHtmlIntoContentView(loadingPageHtml);
         navigateToUrl(START_PAGE_URL);
-      } else {
-        loadHtmlIntoContentView(loadingPageHtml);
       }
-    } else {
-      loadHtmlIntoContentView(loadingPageHtml);
     }
   }
 
@@ -214,7 +208,6 @@
       try {
         const targetUrl = decodeURIComponent(encoded);
         console.log("[Webview] Intercepted link click:", targetUrl);
-        loadHtmlIntoContentView(loadingPageHtml);
         navigateToUrl(targetUrl);
       } catch (e) {
         console.error("[Webview] Failed to decode nav URL:", e);
@@ -235,7 +228,6 @@
     } else {
       // In markdown/preview mode, a real navigation happened
       // (e.g. script interception failed). Show loading and re-fetch.
-      loadHtmlIntoContentView(loadingPageHtml);
       navigateToUrl(url);
     }
   }
@@ -385,10 +377,10 @@
 
 <div class="app-container">
   <!-- Tab Bar -->
-  <div class="tab-bar">
+  <div class="tab-bar electrobun-webkit-app-region-drag">
     {#each appStore.tabs as tab (tab.id)}
       <div
-        class="tab"
+        class="tab electrobun-webkit-app-region-no-drag"
         class:active={tab.isActive}
         onclick={() => handleTabSwitch(tab.id)}
         role="button"
@@ -399,21 +391,21 @@
         {/if}
         <span class="tab-title">{tab.title || "New Tab"}</span>
         <span
-          class="tab-close"
+          class="tab-close electrobun-webkit-app-region-no-drag"
           onclick={(e) => { e.stopPropagation(); closeTab(tab.id); }}
           role="button"
           tabindex="0"
         >×</span>
       </div>
     {/each}
-    <button class="new-tab-btn" onclick={createNewTab} title="New Tab">+</button>
+    <button class="new-tab-btn electrobun-webkit-app-region-no-drag" onclick={createNewTab} title="New Tab">+</button>
   </div>
 
   <!-- Toolbar -->
-  <div class="toolbar">
-    <div class="nav-buttons">
+  <div class="toolbar electrobun-webkit-app-region-drag">
+    <div class="nav-buttons electrobun-webkit-app-region-no-drag">
       <button
-        class="nav-btn"
+        class="nav-btn electrobun-webkit-app-region-no-drag"
         disabled={!appStore.canGoBack}
         onclick={() => {
           if (appStore.viewMode === "html" && contentWebview) {
@@ -425,7 +417,7 @@
         title="Go Back"
       >←</button>
       <button
-        class="nav-btn"
+        class="nav-btn electrobun-webkit-app-region-no-drag"
         disabled={!appStore.canGoForward}
         onclick={() => {
           if (appStore.viewMode === "html" && contentWebview) {
@@ -437,17 +429,17 @@
         title="Go Forward"
       >→</button>
       <button
-        class="nav-btn"
+        class="nav-btn electrobun-webkit-app-region-no-drag"
         onclick={handleReload}
         title="Reload"
       >↻</button>
     </div>
 
-    <div class="url-container">
+    <div class="url-container electrobun-webkit-app-region-no-drag">
       <input
         bind:this={urlInput}
         type="text"
-        class="url-input"
+        class="url-input electrobun-webkit-app-region-no-drag"
         placeholder="Enter URL or search..."
         autocomplete="off"
         spellcheck="false"
@@ -465,29 +457,29 @@
       {/if}
     </div>
 
-    <div class="view-toggle">
+    <div class="view-toggle electrobun-webkit-app-region-no-drag">
       {#if !appStore.isMarkdownContent}
         <button
-          class="view-toggle-btn"
+          class="view-toggle-btn electrobun-webkit-app-region-no-drag"
           class:active={appStore.viewMode === "html"}
           onclick={() => handleViewModeChange("html")}
         >HTML</button>
       {/if}
       <button
-        class="view-toggle-btn"
+        class="view-toggle-btn electrobun-webkit-app-region-no-drag"
         class:active={appStore.viewMode === "markdown"}
         onclick={() => handleViewModeChange("markdown")}
       >Markdown</button>
       <button
-        class="view-toggle-btn"
+        class="view-toggle-btn electrobun-webkit-app-region-no-drag"
         class:active={appStore.viewMode === "preview"}
         onclick={() => handleViewModeChange("preview")}
       >Preview</button>
     </div>
 
-    <div class="settings-toggles">
+    <div class="settings-toggles electrobun-webkit-app-region-no-drag">
       <div
-        class="setting-toggle"
+        class="setting-toggle electrobun-webkit-app-region-no-drag"
         class:active={appStore.settings.sendAcceptMd}
         onclick={() => applySettings({ sendAcceptMd: !appStore.settings.sendAcceptMd })}
         title="Send Accept: text/markdown header"
@@ -496,7 +488,7 @@
         <div class="toggle-switch"></div>
       </div>
       <div
-        class="setting-toggle"
+        class="setting-toggle electrobun-webkit-app-region-no-drag"
         class:active={appStore.settings.autoConvert}
         onclick={() => {
           const next = !appStore.settings.autoConvert;
@@ -607,9 +599,8 @@
     align-items: center;
     background: var(--bg-toolbar);
     border-bottom: 1px solid var(--border);
-    padding: 4px 4px 0px 4px;
+    padding: 4px 4px 0px 104px;
     gap: 2px;
-    -webkit-app-region: drag;
   }
 
   .tab {
@@ -626,7 +617,6 @@
     cursor: pointer;
     max-width: 180px;
     min-width: 100px;
-    -webkit-app-region: no-drag;
     transition: all 0.15s ease;
   }
 
@@ -701,7 +691,6 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    -webkit-app-region: no-drag;
     transition: all 0.15s ease;
   }
 
