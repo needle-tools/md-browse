@@ -6,7 +6,8 @@
   "scripts": {
     "build:toolbar": "cd src/toolbar-svelte && npx vite build",
     "start": "npm run build:toolbar && electrobun build && electrobun dev",
-    "build": "npm run build:toolbar && electrobun build",
+    "build": "npm run build:toolbar && electrobun build --env=stable",
+    "build:stable": "npm run build:toolbar && electrobun build --env=stable",
     "dev:toolbar": "cd src/toolbar-svelte && npx vite build --watch",
     "start:shim": "cd src/toolbar-svelte && npx vite dev"
   },

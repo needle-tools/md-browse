@@ -2,8 +2,8 @@ import type { ElectrobunConfig } from "electrobun";
 
 const config: ElectrobunConfig = {
   app: {
-    name: "MDBrowse",
-    identifier: "sh.herbst.mdbrowse",
+    name: "md-browse",
+    identifier: "tools.needle.md-browse",
     version: "1.0.0",
   },
 
@@ -25,7 +25,7 @@ const config: ElectrobunConfig = {
     },
     mac: {
       codesign: true,
-      notarize: false,
+      notarize: true,
       bundleCEF: false,
     },
   },
