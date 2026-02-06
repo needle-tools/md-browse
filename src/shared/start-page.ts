@@ -13,8 +13,6 @@ A markdown-first browser. Choose a destination:
 - [wikipedia.org](https://wikipedia.org)
 - [google.com](https://google.com)
 - [news.ycombinator.com](https://news.ycombinator.com)
-
-Tip: Press <kbd>Cmd</kbd>+<kbd>L</kbd> to focus the URL bar.
 `;
 
 export const START_PAGE_HTML = `<!DOCTYPE html>
@@ -66,7 +64,6 @@ export const START_PAGE_HTML = `<!DOCTYPE html>
     <li><a href="https://google.com">google.com</a></li>
     <li><a href="https://news.ycombinator.com">news.ycombinator.com</a></li>
   </ul>
-  <p>Tip: Press <kbd>Cmd</kbd>+<kbd>L</kbd> to focus the URL bar.</p>
 </body>
 </html>
 `;

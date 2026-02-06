@@ -17,6 +17,26 @@ const turndown = new TurndownService({
 
 turndown.use(gfm);
 
+turndown.addRule("ignoreLayoutTables", {
+  filter: (node: any) => {
+    if (node.nodeName !== "TABLE") return false;
+    const table = node as Element;
+    const hasHeaders = table.querySelectorAll("th").length > 0;
+    const hasNested = !!table.querySelector("table");
+    return !hasHeaders && hasNested;
+  },
+  replacement: (content: string) => `\n\n${content}\n\n`,
+});
+
+const rulesArray = turndown.rules?.array;
+if (Array.isArray(rulesArray)) {
+  const index = rulesArray.findIndex((r: any) => r?.key === "ignoreLayoutTables");
+  if (index > -1) {
+    const [rule] = rulesArray.splice(index, 1);
+    rulesArray.unshift(rule);
+  }
+}
+
 // Remove unwanted elements
 turndown.remove(["script", "style", "noscript", "iframe", "object", "embed", "nav", "footer", "aside", "meta", "link"]);
 

@@ -30,11 +30,16 @@ const shimSettings: BrowserSettings = {
   allowJavascript: false,
 };
 
+type ShimTab = TabInfo & {
+  history: string[];
+  historyIndex: number;
+  content: PageContent | null;
+};
+
 const shimState = {
-  history: [] as string[],
-  historyIndex: -1,
-  tabs: [] as TabInfo[],
+  tabs: [] as ShimTab[],
   activeTabId: 1,
+  nextTabId: 1,
 };
 
 const turndown = new TurndownService({
@@ -45,6 +50,25 @@ const turndown = new TurndownService({
 });
 
 turndown.use(gfm);
+
+turndown.addRule("ignoreLayoutTables", {
+  filter: (node: HTMLElement) => {
+    if (node.nodeName !== "TABLE") return false;
+    const hasHeaders = node.querySelectorAll("th").length > 0;
+    const hasNested = !!node.querySelector("table");
+    return !hasHeaders && hasNested;
+  },
+  replacement: (content: string) => `\n\n${content}\n\n`,
+});
+
+const rulesArray = turndown.rules?.array;
+if (Array.isArray(rulesArray)) {
+  const index = rulesArray.findIndex((r: any) => r?.key === "ignoreLayoutTables");
+  if (index > -1) {
+    const [rule] = rulesArray.splice(index, 1);
+    rulesArray.unshift(rule);
+  }
+}
 
 turndown.remove(["script", "style", "noscript", "iframe", "object", "embed", "nav", "footer", "aside", "meta", "link"]);
 
@@ -75,28 +99,50 @@ function cleanupTurndownOutput(markdown: string): string {
   return markdown.trim();
 }
 
-function ensureShimTab() {
+function createShimTab(): ShimTab {
+  const id = shimState.nextTabId++;
+  return {
+    id,
+    url: "",
+    title: "New Tab",
+    isActive: false,
+    isLoading: false,
+    history: [],
+    historyIndex: -1,
+    content: null,
+  };
+}
+
+function ensureShimTab(): ShimTab {
   if (shimState.tabs.length === 0) {
-    shimState.tabs.push({
-      id: shimState.activeTabId,
-      url: "",
-      title: "New Tab",
-      isActive: true,
-      isLoading: false,
-    });
+    const tab = createShimTab();
+    shimState.tabs.push(tab);
+    shimState.activeTabId = tab.id;
   }
-  return shimState.tabs[0];
+  let active = shimState.tabs.find((t) => t.id === shimState.activeTabId);
+  if (!active) {
+    active = shimState.tabs[0];
+    shimState.activeTabId = active.id;
+  }
+  return active;
 }
 
 function shimSyncTabs() {
-  const tab = ensureShimTab();
-  tab.isActive = true;
-  appStore.setTabs([tab]);
+  const activeId = ensureShimTab().id;
+  const tabs = shimState.tabs.map((t) => ({
+    id: t.id,
+    url: t.url,
+    title: t.title,
+    isActive: t.id === activeId,
+    isLoading: t.isLoading,
+  }));
+  appStore.setTabs(tabs);
 }
 
 function shimSyncNavigation() {
-  const canGoBack = shimState.historyIndex > 0;
-  const canGoForward = shimState.historyIndex < shimState.history.length - 1;
+  const tab = ensureShimTab();
+  const canGoBack = tab.historyIndex > 0;
+  const canGoForward = tab.historyIndex < tab.history.length - 1;
   appStore.setNavigation(canGoBack, canGoForward);
 }
 
@@ -216,15 +262,16 @@ async function shimNavigate(url: string, updateHistory = true): Promise<void> {
   tab.url = content.url;
   tab.title = content.title || tab.title;
   tab.isLoading = false;
+  tab.content = content;
 
   if (updateHistory) {
-    const lastUrl = shimState.history[shimState.history.length - 1];
+    const lastUrl = tab.history[tab.history.length - 1];
     if (lastUrl !== content.url) {
-      if (shimState.historyIndex < shimState.history.length - 1) {
-        shimState.history = shimState.history.slice(0, shimState.historyIndex + 1);
+      if (tab.historyIndex < tab.history.length - 1) {
+        tab.history = tab.history.slice(0, tab.historyIndex + 1);
       }
-      shimState.history.push(content.url);
-      shimState.historyIndex = shimState.history.length - 1;
+      tab.history.push(content.url);
+      tab.historyIndex = tab.history.length - 1;
     }
   }
 
@@ -333,9 +380,10 @@ export async function reloadCurrentPage(): Promise<void> {
 export async function goBack(): Promise<void> {
   console.log("[RPC] Go back");
   if (isShim) {
-    if (shimState.historyIndex <= 0) return;
-    shimState.historyIndex -= 1;
-    const url = shimState.history[shimState.historyIndex];
+    const tab = ensureShimTab();
+    if (tab.historyIndex <= 0) return;
+    tab.historyIndex -= 1;
+    const url = tab.history[tab.historyIndex];
     await shimNavigate(url, false);
     return;
   }
@@ -350,9 +398,10 @@ export async function goBack(): Promise<void> {
 export async function goForward(): Promise<void> {
   console.log("[RPC] Go forward");
   if (isShim) {
-    if (shimState.historyIndex >= shimState.history.length - 1) return;
-    shimState.historyIndex += 1;
-    const url = shimState.history[shimState.historyIndex];
+    const tab = ensureShimTab();
+    if (tab.historyIndex >= tab.history.length - 1) return;
+    tab.historyIndex += 1;
+    const url = tab.history[tab.historyIndex];
     await shimNavigate(url, false);
     return;
   }
@@ -417,12 +466,9 @@ export async function updateSettings(newSettings: Partial<BrowserSettings>): Pro
 export async function createNewTab(): Promise<void> {
   console.log("[RPC] Create new tab");
   if (isShim) {
-    shimState.history = [];
-    shimState.historyIndex = -1;
-    const tab = ensureShimTab();
-    tab.url = "";
-    tab.title = "New Tab";
-    tab.isLoading = false;
+    const tab = createShimTab();
+    shimState.tabs.push(tab);
+    shimState.activeTabId = tab.id;
     appStore.showWelcomeScreen();
     shimSyncTabs();
     shimSyncNavigation();
@@ -440,7 +486,19 @@ export async function createNewTab(): Promise<void> {
 export async function switchTab(tabId: number): Promise<void> {
   console.log("[RPC] Switch tab:", tabId);
   if (isShim) {
+    const tab = shimState.tabs.find((t) => t.id === tabId);
+    if (!tab) return;
+    shimState.activeTabId = tabId;
+    if (tab.content) {
+      appStore.setContent(tab.content);
+    } else if (tab.url) {
+      appStore.setUrl(tab.url);
+      appStore.clearContentForLoading();
+    } else {
+      appStore.showWelcomeScreen();
+    }
     shimSyncTabs();
+    shimSyncNavigation();
     return;
   }
   try {
@@ -454,13 +512,30 @@ export async function switchTab(tabId: number): Promise<void> {
 export async function closeTab(tabId: number): Promise<void> {
   console.log("[RPC] Close tab:", tabId);
   if (isShim) {
-    shimState.history = [];
-    shimState.historyIndex = -1;
-    const tab = ensureShimTab();
-    tab.url = "";
-    tab.title = "New Tab";
-    tab.isLoading = false;
-    appStore.showWelcomeScreen();
+    const index = shimState.tabs.findIndex((t) => t.id === tabId);
+    if (index === -1) return;
+    const wasActive = shimState.activeTabId === tabId;
+    shimState.tabs.splice(index, 1);
+
+    if (shimState.tabs.length === 0) {
+      const tab = createShimTab();
+      shimState.tabs.push(tab);
+      shimState.activeTabId = tab.id;
+      appStore.showWelcomeScreen();
+    } else if (wasActive) {
+      const newIndex = Math.min(index, shimState.tabs.length - 1);
+      const next = shimState.tabs[newIndex];
+      shimState.activeTabId = next.id;
+      if (next.content) {
+        appStore.setContent(next.content);
+      } else if (next.url) {
+        appStore.setUrl(next.url);
+        appStore.clearContentForLoading();
+      } else {
+        appStore.showWelcomeScreen();
+      }
+    }
+
     shimSyncTabs();
     shimSyncNavigation();
     return;

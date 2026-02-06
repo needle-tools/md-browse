@@ -39,6 +39,13 @@
   let urlInput: HTMLInputElement;
   let contentFrame: HTMLIFrameElement;
 
+  const viewModeByTab = new Map<number, ViewMode>();
+  let lastActiveTabId: number | null = null;
+
+  function getActiveTabId(): number | null {
+    return appStore.tabs.find((t) => t.isActive)?.id ?? null;
+  }
+
   const loadingPageHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{background:#1a1a2e;color:#eaeaea;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:system-ui}p{opacity:0.5;font-size:18px}</style></head><body><p>Loading…</p></body></html>`;
   const isStartPageUrl = (url?: string) => url === START_PAGE_URL;
 
@@ -91,6 +98,10 @@
 
   // Handle view mode change
   async function handleViewModeChange(mode: ViewMode) {
+    const activeTabId = getActiveTabId();
+    if (activeTabId !== null) {
+      viewModeByTab.set(activeTabId, mode);
+    }
     const wasHtml = appStore.viewMode === "html";
     appStore.setViewMode(mode);
 
@@ -100,6 +111,20 @@
     } else {
       // Re-render with current content
       renderContent();
+    }
+  }
+
+  async function handleTabSwitch(tabId: number) {
+    const currentActiveId = getActiveTabId();
+    if (currentActiveId !== null) {
+      viewModeByTab.set(currentActiveId, appStore.viewMode);
+    }
+
+    await switchTab(tabId);
+
+    const desiredMode = viewModeByTab.get(tabId);
+    if (desiredMode && desiredMode !== appStore.viewMode) {
+      await handleViewModeChange(desiredMode);
     }
   }
 
@@ -232,6 +257,17 @@
     renderContent();
   });
 
+  $effect(() => {
+    const activeId = getActiveTabId();
+    if (activeId !== lastActiveTabId) {
+      lastActiveTabId = activeId;
+      const desiredMode = activeId ? viewModeByTab.get(activeId) : undefined;
+      if (desiredMode && desiredMode !== appStore.viewMode) {
+        handleViewModeChange(desiredMode);
+      }
+    }
+  });
+
   // Watch for URL changes and update input
   $effect(() => {
     const url = appStore.currentUrl;
@@ -299,6 +335,17 @@
 
   // Keyboard shortcuts
   function handleKeydown(e: KeyboardEvent) {
+    const target = e.target as HTMLElement | null;
+    const isEditable = !!target && (
+      target.tagName === "INPUT" ||
+      target.tagName === "TEXTAREA" ||
+      target.isContentEditable
+    );
+
+    if (isEditable && !((e.metaKey || e.ctrlKey) && e.key === "l")) {
+      return;
+    }
+
     if ((e.metaKey || e.ctrlKey) && e.key === "l") {
       e.preventDefault();
       urlInput?.focus();
@@ -343,7 +390,7 @@
       <div
         class="tab"
         class:active={tab.isActive}
-        onclick={() => switchTab(tab.id)}
+        onclick={() => handleTabSwitch(tab.id)}
         role="button"
         tabindex="0"
       >
@@ -445,7 +492,7 @@
         onclick={() => applySettings({ sendAcceptMd: !appStore.settings.sendAcceptMd })}
         title="Send Accept: text/markdown header"
       >
-        <span class="toggle-label">MD Header</span>
+        <span class="toggle-label">accept: text/markdown</span>
         <div class="toggle-switch"></div>
       </div>
       <div
@@ -460,7 +507,7 @@
         }}
         title="Auto-convert HTML to Markdown"
       >
-        <span class="toggle-label">Auto-Convert</span>
+        <span class="toggle-label">html-to-md</span>
         <div class="toggle-switch"></div>
       </div>
     </div>
@@ -711,8 +758,6 @@
     background: var(--bg-input);
     border-radius: var(--border-radius);
     border: 1px solid var(--border);
-    padding: 0 12px;
-    height: 36px;
     transition: border-color 0.15s ease;
   }
 
@@ -727,6 +772,7 @@
     color: var(--text-primary);
     font-size: 10px;
     outline: none;
+    padding: 9px 12px;
   }
 
   .url-input::placeholder {
@@ -735,12 +781,13 @@
 
   .md-indicator {
     font-size: 10px;
-    padding: 3px 8px;
+    padding: 6px 14px;
     border-radius: var(--border-radius-half);
-    background: var(--accent);
-    color: white;
+    background: var(--accent-text);
+    color: black;
     font-weight: 600;
     margin-left: 8px;
+    margin-right: 3px;
     display: none;
     white-space: nowrap;
   }
@@ -788,9 +835,6 @@
   .settings-toggles {
     display: flex;
     gap: 8px;
-    margin-left: 8px;
-    padding-left: 8px;
-    border-left: 1px solid var(--border);
   }
 
   .setting-toggle {
@@ -837,7 +881,7 @@
   }
 
   .setting-toggle.active .toggle-switch {
-    background: var(--accent);
+    background: var(--accent-text);
   }
 
   .setting-toggle.active .toggle-switch::after {

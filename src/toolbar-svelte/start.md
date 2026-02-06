@@ -10,5 +10,3 @@ A markdown-first browser. Choose a destination:
 - [wikipedia.org](https://wikipedia.org)
 - [google.com](https://google.com)
 - [news.ycombinator.com](https://news.ycombinator.com)
-
-Tip: Press <kbd>Cmd</kbd>+<kbd>L</kbd> to focus the URL bar.

@@ -219,7 +219,7 @@ export function generateMarkdownHtml(markdown: string, rawMode: boolean, baseUrl
       color: var(--text-secondary);
     }
     img { max-width: 100%; height: auto; }
-    table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+    table { border-collapse: collapse; width: 100%; }
     th, td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; }
     th { background: var(--bg-input); }
     .raw-markdown {
@@ -232,7 +232,6 @@ export function generateMarkdownHtml(markdown: string, rawMode: boolean, baseUrl
       background: var(--bg-input);
       border: 1px solid var(--border);
       border-radius: var(--border-radius);
-      padding: 16px 20px;
       margin-bottom: 24px;
     }
     .frontmatter-table { width: 100%; border-collapse: collapse; font-size: 14px; }
