@@ -1,91 +1,12 @@
-import { BrowserWindow, BrowserView, ApplicationMenu, Utils } from "electrobun/bun";
+import Electrobun, { BrowserWindow, BrowserView, ApplicationMenu, Utils } from "electrobun/bun";
 import type { ToolbarRPCType, TabInfo, NavigationState, PageContent, BrowserSettings } from "../shared/types";
-import TurndownService from "turndown";
-// @ts-expect-error - turndown-plugin-gfm has no types in this project
-import { gfm } from "turndown-plugin-gfm";
+import { createTurndownService, cleanupTurndownOutput } from "../shared/turndown";
 import { START_PAGE_URL, START_PAGE_TITLE, START_PAGE_MARKDOWN, START_PAGE_HTML } from "../shared/start-page";
 
 console.log("[MDBrowse] Starting markdown browser...");
 
-ApplicationMenu.setApplicationMenu([
-  {
-    submenu: [{ label: "Quit", role: "quit" }],
-  },
-  {
-    label: "Edit",
-    submenu: [
-      { role: "undo" },
-      { role: "redo" },
-      { type: "separator" },
-      { role: "cut" },
-      { role: "copy" },
-      { role: "paste" },
-      { role: "pasteAndMatchStyle" },
-      { role: "delete" },
-      { role: "selectAll" },
-    ],
-  },
-]);
-
 // Initialize Turndown for HTML to Markdown conversion
-const turndown = new TurndownService({
-  headingStyle: "atx",
-  codeBlockStyle: "fenced",
-  emDelimiter: "_",
-  bulletListMarker: "-",
-});
-
-turndown.use(gfm);
-
-turndown.addRule("ignoreLayoutTables", {
-  filter: (node: any) => {
-    if (node.nodeName !== "TABLE") return false;
-    const table = node as Element;
-    const hasHeaders = table.querySelectorAll("th").length > 0;
-    const hasNested = !!table.querySelector("table");
-    return !hasHeaders && hasNested;
-  },
-  replacement: (content: string) => `\n\n${content}\n\n`,
-});
-
-const rulesArray = turndown.rules?.array;
-if (Array.isArray(rulesArray)) {
-  const index = rulesArray.findIndex((r: any) => r?.key === "ignoreLayoutTables");
-  if (index > -1) {
-    const [rule] = rulesArray.splice(index, 1);
-    rulesArray.unshift(rule);
-  }
-}
-
-// Remove unwanted elements
-turndown.remove(["script", "style", "noscript", "iframe", "object", "embed", "nav", "footer", "aside", "meta", "link"]);
-
-// Remove links that have no visible text content (e.g. upvote arrows, empty anchors)
-turndown.addRule('removeBlankLinks', {
-  filter: function(node: any) {
-    return node.nodeName === 'A' &&
-           node.getAttribute('href') !== null &&
-           (node.textContent || '').trim() === '';
-  },
-  replacement: function() {
-    return '';
-  }
-});
-
-// Post-process Turndown output to fix broken link formatting
-function cleanupTurndownOutput(markdown: string): string {
-  // Fix multi-line link text: [\n text \n](url) → [text](url)
-  markdown = markdown.replace(/\[([^\]]*)\]\(([^)]+)\)/g, (_match, text, url) => {
-    const cleaned = text.replace(/\s+/g, ' ').trim();
-    if (!cleaned) return '';
-    return `[${cleaned}](${url})`;
-  });
-  // Remove orphaned list numbers on their own line (e.g. "21.")
-  markdown = markdown.replace(/^\d+\.\s*$/gm, '');
-  // Clean up excessive blank lines
-  markdown = markdown.replace(/\n{3,}/g, '\n\n');
-  return markdown.trim();
-}
+const turndown = createTurndownService();
 
 function isSitemapXml(contentType: string, text: string): boolean {
   if (!text) return false;
@@ -186,6 +107,38 @@ let activeTabId = 0;
 let nextTabId = 1;
 let viewMode: "markdown" | "preview" = "markdown";
 let mainWindow: BrowserWindow;
+
+function sendShortcutToToolbar(action: "search" | "focus-url" | "close-search") {
+  if (!mainWindow) return;
+  mainWindow.webview.executeJavascript(`
+    window.dispatchEvent(new CustomEvent('mdbrowse:shortcut', { detail: { action: ${JSON.stringify(action)} } }));
+  `);
+}
+
+function setAppMenu() {
+  ApplicationMenu.setApplicationMenu([
+    {
+      submenu: [{ label: "Quit", role: "quit" }],
+    },
+    {
+      label: "Edit",
+      submenu: [
+        { role: "undo" },
+        { role: "redo" },
+        { type: "separator" },
+        { role: "cut" },
+        { role: "copy" },
+        { role: "paste" },
+        { role: "pasteAndMatchStyle" },
+        { role: "delete" },
+        { role: "selectAll" },
+        { type: "separator" },
+        { label: "Find in Page", action: "find-in-page" },
+        { label: "Focus Address Bar", action: "focus-address-bar" },
+      ],
+    },
+  ]);
+}
 
 // Get the active tab
 function getActiveTab(): Tab | undefined {
@@ -819,6 +772,18 @@ mainWindow = new BrowserWindow({
 });
 
 console.log("[MDBrowse] Window created");
+
+setAppMenu();
+
+// Listen for custom application menu actions
+Electrobun.events.on("application-menu-clicked", (e: any) => {
+  const action = e?.data?.action;
+  if (action === "find-in-page") {
+    sendShortcutToToolbar("search");
+  } else if (action === "focus-address-bar") {
+    sendShortcutToToolbar("focus-url");
+  }
+});
 
 // Handle window close
 mainWindow.on("close", () => {

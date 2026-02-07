@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, tick, untrack } from "svelte";
   import { appStore } from "$lib/store.svelte";
   import {
     navigateToUrl,
@@ -23,6 +23,19 @@
 
   const isShim = typeof window !== "undefined" && !(window as unknown as { __electrobunWebviewId?: number }).__electrobunWebviewId;
 
+  // Preload script for the content webview: forwards keyboard shortcuts to the host
+  const contentPreload = [
+    "document.addEventListener('keydown', function(e) {",
+    "if ((e.metaKey || e.ctrlKey) && (e.key === 'f' || e.key === 'l')) {",
+    "e.preventDefault();",
+    "if (window.__electrobunSendToHost) window.__electrobunSendToHost({ type: 'shortcut', action: e.key === 'f' ? 'search' : 'focus-url' });",
+    "}",
+    "if (e.key === 'Escape') {",
+    "if (window.__electrobunSendToHost) window.__electrobunSendToHost({ type: 'shortcut', action: 'close-search' });",
+    "}",
+    "});"
+  ].join(" ");
+
   // Reference to the webview element
   let contentWebview = $state<
     (HTMLElement & {
@@ -34,11 +47,18 @@
     canGoForward: () => Promise<boolean>;
     goBack: () => void;
     goForward: () => void;
+    findInPage?: (searchText: string, options?: { forward?: boolean; matchCase?: boolean }) => void;
+    stopFindInPage?: () => void;
+    callAsyncJavaScript?: (options: { script: string }) => Promise<unknown>;
+    on?: (event: string, listener: (e: any) => void) => void;
     }) | null
   >(null);
 
   let urlInput: HTMLInputElement;
+  let searchInput: HTMLInputElement;
   let contentFrame = $state<HTMLIFrameElement | null>(null);
+  let searchCount = $state(0);
+  let searchIndex = $state(0);
 
   const viewModeByTab = new Map<number, ViewMode>();
   let lastActiveTabId: number | null = null;
@@ -48,6 +68,274 @@
   }
 
   const isStartPageUrl = (url?: string) => url === START_PAGE_URL;
+
+  const highlightStyle = "background: rgba(250, 204, 21, 0.35); color: inherit;";
+  const activeHighlightStyle = "background: rgba(59, 130, 246, 0.55); color: inherit;";
+
+  function escapeRegExp(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  function clearIframeHighlights(doc: Document) {
+    const marks = Array.from(doc.querySelectorAll("mark.mdbrowse-search-hit"));
+    for (const mark of marks) {
+      const parent = mark.parentNode;
+      if (!parent) continue;
+      parent.replaceChild(doc.createTextNode(mark.textContent || ""), mark);
+      parent.normalize();
+    }
+  }
+
+  function highlightIframeMatches(doc: Document, query: string) {
+    clearIframeHighlights(doc);
+    if (!query) return { count: 0, index: 0 };
+
+    const regex = new RegExp(escapeRegExp(query), "gi");
+    const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT, {
+      acceptNode: (node) => {
+        const text = node.nodeValue || "";
+        if (!text.trim()) return NodeFilter.FILTER_REJECT;
+        const parent = node.parentElement;
+        if (!parent) return NodeFilter.FILTER_REJECT;
+        if (parent.closest("script, style, mark.mdbrowse-search-hit")) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    });
+
+    const textNodes: Text[] = [];
+    while (walker.nextNode()) {
+      textNodes.push(walker.currentNode as Text);
+    }
+
+    let count = 0;
+    const marks: HTMLElement[] = [];
+
+    for (const node of textNodes) {
+      const text = node.nodeValue || "";
+      regex.lastIndex = 0;
+      if (!regex.test(text)) continue;
+      regex.lastIndex = 0;
+      const fragment = doc.createDocumentFragment();
+      let lastIndex = 0;
+      let match: RegExpExecArray | null;
+      while ((match = regex.exec(text)) !== null) {
+        const start = match.index;
+        const end = start + match[0].length;
+        if (start > lastIndex) {
+          fragment.append(text.slice(lastIndex, start));
+        }
+        const mark = doc.createElement("mark");
+        mark.className = "mdbrowse-search-hit";
+        mark.setAttribute("style", highlightStyle);
+        mark.textContent = text.slice(start, end);
+        fragment.append(mark);
+        marks.push(mark);
+        count += 1;
+        lastIndex = end;
+      }
+      if (lastIndex < text.length) {
+        fragment.append(text.slice(lastIndex));
+      }
+      node.parentNode?.replaceChild(fragment, node);
+    }
+
+    if (marks.length > 0) {
+      marks[0].classList.add("mdbrowse-search-active");
+      marks[0].setAttribute("style", activeHighlightStyle);
+      marks[0].scrollIntoView({ block: "center", behavior: "smooth" });
+      return { count: marks.length, index: 1 };
+    }
+    return { count: 0, index: 0 };
+  }
+
+  function activateIframeMatch(doc: Document, nextIndex: number) {
+    const marks = Array.from(doc.querySelectorAll("mark.mdbrowse-search-hit")) as HTMLElement[];
+    if (marks.length === 0) return { count: 0, index: 0 };
+    const normalized = ((nextIndex - 1 + marks.length) % marks.length);
+    marks.forEach((mark) => {
+      mark.classList.remove("mdbrowse-search-active");
+      mark.setAttribute("style", highlightStyle);
+    });
+    const active = marks[normalized];
+    active.classList.add("mdbrowse-search-active");
+    active.setAttribute("style", activeHighlightStyle);
+    active.scrollIntoView({ block: "center", behavior: "smooth" });
+    return { count: marks.length, index: normalized + 1 };
+  }
+
+  async function runWebviewSearch(action: "highlight" | "next" | "prev" | "clear", query: string) {
+    if (!contentWebview?.callAsyncJavaScript) return { count: 0, index: 0 };
+    const script = `(() => {
+      const action = ${JSON.stringify(action)};
+      const query = ${JSON.stringify(query)};
+      const highlightStyle = ${JSON.stringify(highlightStyle)};
+      const activeHighlightStyle = ${JSON.stringify(activeHighlightStyle)};
+      const escapeRegExp = (value) => value.replace(/[.*+?^{}$()|[\\]\\\\]/g, "\\\\$&");
+
+      const state = window.__mdbrowseSearchState || { query: "", count: 0, index: 0 };
+      const clearHighlights = () => {
+        const marks = Array.from(document.querySelectorAll("mark.mdbrowse-search-hit"));
+        for (const mark of marks) {
+          const parent = mark.parentNode;
+          if (!parent) continue;
+          parent.replaceChild(document.createTextNode(mark.textContent || ""), mark);
+          parent.normalize();
+        }
+      };
+
+      const highlightMatches = (text) => {
+        clearHighlights();
+        if (!text) return { count: 0, index: 0 };
+        const regex = new RegExp(escapeRegExp(text), "gi");
+        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+          acceptNode: (node) => {
+            const value = node.nodeValue || "";
+            if (!value.trim()) return NodeFilter.FILTER_REJECT;
+            const parent = node.parentElement;
+            if (!parent) return NodeFilter.FILTER_REJECT;
+            if (parent.closest("script, style, mark.mdbrowse-search-hit")) return NodeFilter.FILTER_REJECT;
+            return NodeFilter.FILTER_ACCEPT;
+          }
+        });
+
+        const nodes = [];
+        while (walker.nextNode()) nodes.push(walker.currentNode);
+
+        let count = 0;
+        const marks = [];
+
+        for (const node of nodes) {
+          const value = node.nodeValue || "";
+          regex.lastIndex = 0;
+          if (!regex.test(value)) continue;
+          regex.lastIndex = 0;
+          const fragment = document.createDocumentFragment();
+          let lastIndex = 0;
+          let match;
+          while ((match = regex.exec(value)) !== null) {
+            const start = match.index;
+            const end = start + match[0].length;
+            if (start > lastIndex) fragment.append(value.slice(lastIndex, start));
+            const mark = document.createElement("mark");
+            mark.className = "mdbrowse-search-hit";
+            mark.setAttribute("style", highlightStyle);
+            mark.textContent = value.slice(start, end);
+            fragment.append(mark);
+            marks.push(mark);
+            count += 1;
+            lastIndex = end;
+          }
+          if (lastIndex < value.length) fragment.append(value.slice(lastIndex));
+          node.parentNode?.replaceChild(fragment, node);
+        }
+
+        if (marks.length > 0) {
+          const active = marks[0];
+          active.classList.add("mdbrowse-search-active");
+          active.setAttribute("style", activeHighlightStyle);
+          active.scrollIntoView({ block: "center", behavior: "smooth" });
+          return { count: marks.length, index: 1 };
+        }
+        return { count: 0, index: 0 };
+      };
+
+      const activateIndex = (nextIndex) => {
+        const marks = Array.from(document.querySelectorAll("mark.mdbrowse-search-hit"));
+        if (!marks.length) return { count: 0, index: 0 };
+        const normalized = ((nextIndex - 1 + marks.length) % marks.length);
+        marks.forEach((mark) => {
+          mark.classList.remove("mdbrowse-search-active");
+          mark.setAttribute("style", highlightStyle);
+        });
+        const active = marks[normalized];
+        active.classList.add("mdbrowse-search-active");
+        active.setAttribute("style", activeHighlightStyle);
+        active.scrollIntoView({ block: "center", behavior: "smooth" });
+        return { count: marks.length, index: normalized + 1 };
+      };
+
+      if (action === "clear" || !query) {
+        clearHighlights();
+        window.__mdbrowseSearchState = { query: "", count: 0, index: 0 };
+        return window.__mdbrowseSearchState;
+      }
+
+      if (action === "highlight" || state.query !== query) {
+        const result = highlightMatches(query);
+        window.__mdbrowseSearchState = { query, count: result.count, index: result.index };
+        return window.__mdbrowseSearchState;
+      }
+
+      if (action === "next") {
+        const result = activateIndex(state.index + 1);
+        window.__mdbrowseSearchState = { query, count: result.count, index: result.index };
+        return window.__mdbrowseSearchState;
+      }
+
+      if (action === "prev") {
+        const result = activateIndex(state.index - 1);
+        window.__mdbrowseSearchState = { query, count: result.count, index: result.index };
+        return window.__mdbrowseSearchState;
+      }
+
+      return window.__mdbrowseSearchState || { query: "", count: 0, index: 0 };
+    })();`;
+
+    const result = await contentWebview.callAsyncJavaScript({ script });
+    if (result && typeof result === "object") {
+      const output = result as { count?: number; index?: number };
+      return { count: output.count ?? 0, index: output.index ?? 0 };
+    }
+    return { count: 0, index: 0 };
+  }
+
+  async function updateSearchState(count: number, index: number) {
+    searchCount = count;
+    searchIndex = index;
+  }
+
+  async function clearSearch() {
+    if (isShim) {
+      const doc = contentFrame?.contentDocument;
+      if (doc) clearIframeHighlights(doc);
+    } else if (contentWebview?.stopFindInPage) {
+      contentWebview.stopFindInPage();
+    } else if (!isShim) {
+      await runWebviewSearch("clear", "");
+    }
+    updateSearchState(0, 0);
+  }
+
+  async function runSearch(action: "highlight" | "next" | "prev" = "highlight") {
+    const query = appStore.searchQuery.trim();
+    if (!query) {
+      await clearSearch();
+      return;
+    }
+
+    if (isShim) {
+      const doc = contentFrame?.contentDocument;
+      if (!doc) return;
+      if (action === "highlight") {
+        const result = highlightIframeMatches(doc, query);
+        updateSearchState(result.count, result.index);
+      } else {
+        const nextIndex = action === "next" ? searchIndex + 1 : searchIndex - 1;
+        const result = activateIframeMatch(doc, nextIndex);
+        updateSearchState(result.count, result.index);
+      }
+      return;
+    }
+
+    if (contentWebview?.findInPage) {
+      contentWebview.findInPage(query, { forward: action !== "prev", matchCase: false });
+      updateSearchState(0, 0);
+      return;
+    }
+
+    const result = await runWebviewSearch(action, query);
+    updateSearchState(result.count, result.index);
+  }
 
   // Load HTML content into the content view (webview or iframe)
   function loadHtmlIntoContentView(html: string) {
@@ -269,6 +557,34 @@
       appStore.setLoading(false);
       updateWebviewNavigationState();
     });
+
+    // Listen for keyboard shortcuts forwarded from the content webview's preload
+    contentWebview.on?.("host-message", (event: any) => {
+      const msg = event?.detail;
+      if (msg?.type === "shortcut") {
+        if (msg.action === "search") appStore.toggleSearch();
+        else if (msg.action === "focus-url") { urlInput?.focus(); urlInput?.select(); }
+        else if (msg.action === "close-search") appStore.closeSearch();
+      }
+    });
+  }
+
+  // Inject keyboard shortcut listeners into iframe (shim mode)
+  function injectIframeShortcuts() {
+    if (!contentFrame?.contentWindow) return;
+    try {
+      contentFrame.contentWindow.addEventListener('keydown', (e: KeyboardEvent) => {
+        if ((e.metaKey || e.ctrlKey) && (e.key === 'f' || e.key === 'l')) {
+          e.preventDefault();
+          window.postMessage({ type: 'mdbrowse:shortcut', action: e.key === 'f' ? 'search' : 'focus-url' }, '*');
+        }
+        if (e.key === 'Escape') {
+          window.postMessage({ type: 'mdbrowse:shortcut', action: 'close-search' }, '*');
+        }
+      });
+    } catch {
+      // Cross-origin iframe, can't inject shortcuts
+    }
   }
 
   // Handle postMessage from iframe (shim mode link interception)
@@ -276,6 +592,12 @@
     if (event.data?.type === "mdbrowse:navigate" && event.data.url) {
       console.log("[Shim] Intercepted link click:", event.data.url);
       navigateToUrl(event.data.url);
+    }
+    if (event.data?.type === "mdbrowse:shortcut" && event.data.action) {
+      const action = event.data.action;
+      if (action === "search") appStore.toggleSearch();
+      else if (action === "focus-url") { urlInput?.focus(); urlInput?.select(); }
+      else if (action === "close-search") appStore.closeSearch();
     }
   }
 
@@ -303,6 +625,28 @@
     attachWebviewListeners();
   });
 
+  $effect(() => {
+    const visible = appStore.searchVisible;
+    untrack(() => {
+      if (visible) {
+        tick().then(() => {
+          searchInput?.focus();
+          searchInput?.select();
+        });
+      } else {
+        clearSearch();
+      }
+    });
+  });
+
+  $effect(() => {
+    const _content = appStore.currentContent;
+    const _mode = appStore.viewMode;
+    if (appStore.searchVisible && appStore.searchQuery.trim()) {
+      runSearch("highlight");
+    }
+  });
+
   // Watch for URL changes and update input
   $effect(() => {
     const url = appStore.currentUrl;
@@ -318,12 +662,29 @@
   onMount(() => {
     console.log("[App] Mounting...");
 
+    const handleShortcutEvent = (event: Event) => {
+      const detail = (event as CustomEvent<{ action?: string }>).detail;
+      if (!detail?.action) return;
+      if (detail.action === "search") {
+        appStore.toggleSearch();
+      } else if (detail.action === "focus-url") {
+        urlInput?.focus();
+        urlInput?.select();
+      } else if (detail.action === "close-search") {
+        appStore.closeSearch();
+      }
+    };
+
+    window.addEventListener("mdbrowse:shortcut", handleShortcutEvent as EventListener);
+
     // Setup RPC event listeners
     setupEventListeners();
 
-    // Listen for postMessage from iframe (shim mode link clicks)
+    // Listen for postMessage from iframe (shim mode link clicks & shortcuts)
     if (isShim) {
       window.addEventListener("message", handleIframeMessage);
+      // Re-inject keyboard shortcut handlers on each iframe load
+      contentFrame?.addEventListener("load", injectIframeShortcuts);
     }
 
     attachWebviewListeners();
@@ -336,6 +697,10 @@
     urlInput?.focus();
 
     console.log("[App] Mounted");
+
+    return () => {
+      window.removeEventListener("mdbrowse:shortcut", handleShortcutEvent as EventListener);
+    };
   });
 
   // Keyboard shortcuts
@@ -347,7 +712,12 @@
       target.isContentEditable
     );
 
-    if (isEditable && !((e.metaKey || e.ctrlKey) && e.key === "l")) {
+    // Always allow search shortcuts even when in editable fields
+    const isSearchShortcut =
+      ((e.metaKey || e.ctrlKey) && (e.key === "f" || e.key === "l")) ||
+      (e.key === "Escape" && appStore.searchVisible);
+
+    if (isEditable && !isSearchShortcut) {
       return;
     }
 
@@ -484,6 +854,7 @@
       >Preview</button>
     </div>
 
+    {#if !appStore.searchVisible}
     <div class="settings-toggles electrobun-webkit-app-region-no-drag">
       <button
         type="button"
@@ -514,25 +885,36 @@
         <div class="toggle-switch"></div>
       </button>
     </div>
-  </div>
+    {/if}
 
-  <!-- Search Modal -->
-  {#if appStore.searchVisible}
-    <div class="search-modal visible">
-      <input
-        type="text"
-        placeholder="Search in page..."
-        value={appStore.searchQuery}
-        oninput={(e) => appStore.setSearchQuery(e.currentTarget.value)}
-      />
-      <span class="search-count">0/0</span>
-      <div class="search-nav">
-        <button class="search-btn" title="Previous">↑</button>
-        <button class="search-btn" title="Next">↓</button>
+    <!-- Search Modal -->
+    {#if appStore.searchVisible}
+      <div class="search-modal electrobun-webkit-app-region-no-drag">
+        <input
+          bind:this={searchInput}
+          type="text"
+          placeholder="Search in page..."
+          value={appStore.searchQuery}
+          oninput={(e) => {
+            appStore.setSearchQuery(e.currentTarget.value);
+            runSearch("highlight");
+          }}
+          onkeydown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              runSearch(e.shiftKey ? "prev" : "next");
+            }
+          }}
+        />
+        <span class="search-count">{searchCount ? `${searchIndex}/${searchCount}` : "0/0"}</span>
+        <div class="search-nav">
+          <button class="search-btn" title="Previous" onclick={() => runSearch("prev")}>↑</button>
+          <button class="search-btn" title="Next" onclick={() => runSearch("next")}>↓</button>
+        </div>
+        <button class="search-close" onclick={appStore.closeSearch} title="Close">×</button>
       </div>
-      <button class="search-close" onclick={appStore.closeSearch} title="Close">×</button>
-    </div>
-  {/if}
+    {/if}
+  </div>
 
   <!-- Content Area -->
   <div class="content-area">
@@ -549,6 +931,7 @@
         id="contentWebview"
         src="about:blank"
         partition="persist:mdbrowse-content"
+        preload={contentPreload}
       ></electrobun-webview>
     {/if}
   </div>
@@ -719,6 +1102,7 @@
     background: var(--bg-secondary);
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
+    position: relative;
   }
 
   .nav-buttons {
@@ -891,27 +1275,22 @@
 
   /* Search Modal */
   .search-modal {
-    position: fixed;
-    top: 80px;
-    right: 20px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    border-radius: var(--border-radius);
-    padding: 12px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-    z-index: 1000;
     display: flex;
     gap: 8px;
     align-items: center;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--border-radius);
+    padding: 3px 3px;
   }
 
   .search-modal input {
     background: var(--bg-input);
     border: 1px solid var(--border);
     border-radius: var(--border-radius);
-    padding: 8px 12px;
+    padding: 4px 4px;
     color: var(--text-primary);
-    font-size: 14px;
+    font-size: 10px;
     width: 250px;
     outline: none;
   }
@@ -927,13 +1306,12 @@
 
   .search-modal .search-btn {
     width: 28px;
-    height: 28px;
     border: none;
     background: var(--bg-input);
     color: var(--text-secondary);
     border-radius: var(--border-radius-half);
     cursor: pointer;
-    font-size: 10px;
+    font-size: 18px;
   }
 
   .search-modal .search-btn:hover {
@@ -955,7 +1333,7 @@
     background: transparent;
     color: var(--text-secondary);
     cursor: pointer;
-    font-size: 22px;
+    font-size: 18px;
     border-radius: var(--border-radius-half);
   }
 

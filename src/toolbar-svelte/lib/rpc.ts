@@ -2,9 +2,7 @@
 import { appStore } from "./store.svelte";
 import type { PageContent, TabInfo, NavigationState, BrowserSettings } from "./types";
 import { createRPC, Electroview } from "electrobun/view";
-import TurndownService from "turndown";
-// @ts-expect-error - turndown-plugin-gfm has no types in this project
-import { gfm } from "turndown-plugin-gfm";
+import { createTurndownService, cleanupTurndownOutput } from "../../shared/turndown";
 import type { ToolbarRPCType } from "../../shared/types";
 import { START_PAGE_URL, START_PAGE_TITLE, START_PAGE_MARKDOWN, START_PAGE_HTML } from "../../shared/start-page";
 
@@ -42,62 +40,7 @@ const shimState = {
   nextTabId: 1,
 };
 
-const turndown = new TurndownService({
-  headingStyle: "atx",
-  codeBlockStyle: "fenced",
-  emDelimiter: "_",
-  bulletListMarker: "-",
-});
-
-turndown.use(gfm);
-
-turndown.addRule("ignoreLayoutTables", {
-  filter: (node: HTMLElement) => {
-    if (node.nodeName !== "TABLE") return false;
-    const hasHeaders = node.querySelectorAll("th").length > 0;
-    const hasNested = !!node.querySelector("table");
-    return !hasHeaders && hasNested;
-  },
-  replacement: (content: string) => `\n\n${content}\n\n`,
-});
-
-const rulesArray = turndown.rules?.array;
-if (Array.isArray(rulesArray)) {
-  const index = rulesArray.findIndex((r: any) => r?.key === "ignoreLayoutTables");
-  if (index > -1) {
-    const [rule] = rulesArray.splice(index, 1);
-    rulesArray.unshift(rule);
-  }
-}
-
-turndown.remove(["script", "style", "noscript", "iframe", "object", "embed", "nav", "footer", "aside", "meta", "link"]);
-
-// Remove links that have no visible text content (e.g. upvote arrows, empty anchors)
-turndown.addRule('removeBlankLinks', {
-  filter: function(node: HTMLElement) {
-    return node.nodeName === 'A' &&
-           node.getAttribute('href') !== null &&
-           (node.textContent || '').trim() === '';
-  },
-  replacement: function() {
-    return '';
-  }
-});
-
-// Post-process Turndown output to fix broken link formatting
-function cleanupTurndownOutput(markdown: string): string {
-  // Fix multi-line link text: [\n text \n](url) → [text](url)
-  markdown = markdown.replace(/\[([^\]]*)\]\(([^)]+)\)/g, (_match: string, text: string, url: string) => {
-    const cleaned = text.replace(/\s+/g, ' ').trim();
-    if (!cleaned) return '';
-    return `[${cleaned}](${url})`;
-  });
-  // Remove orphaned list numbers on their own line (e.g. "21.")
-  markdown = markdown.replace(/^\d+\.\s*$/gm, '');
-  // Clean up excessive blank lines
-  markdown = markdown.replace(/\n{3,}/g, '\n\n');
-  return markdown.trim();
-}
+const turndown = createTurndownService();
 
 function isSitemapXml(contentType: string, text: string): boolean {
   if (!text) return false;

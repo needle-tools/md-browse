@@ -5,11 +5,14 @@
   "description": "A markdown-first browser that prioritizes markdown content",
   "scripts": {
     "build:toolbar": "cd src/toolbar-svelte && npx vite build",
-    "start": "npm run build:toolbar && electrobun build && electrobun dev",
-    "build": "npm run build:toolbar && electrobun build --env=stable",
-    "build:stable": "npm run build:toolbar && electrobun build --env=stable",
+    "start": "npm run build:toolbar && MACOSX_DEPLOYMENT_TARGET=14.0 electrobun build && electrobun dev",
+    "build": "npm run build:toolbar && MACOSX_DEPLOYMENT_TARGET=14.0 electrobun build --env=stable",
+    "build:stable": "npm run build:toolbar && MACOSX_DEPLOYMENT_TARGET=14.0 electrobun build --env=stable",
     "dev:toolbar": "cd src/toolbar-svelte && npx vite build --watch",
-    "start:shim": "cd src/toolbar-svelte && npx vite dev"
+    "start:shim": "cd src/toolbar-svelte && npx vite dev --host",
+    "test:turndown": "bun run scripts/turndown.test.ts",
+    "test:comparison": "bun run scripts/turndown-comparison.test.ts",
+    "test": "bun run scripts/turndown.test.ts && bun run scripts/turndown-comparison.test.ts"
   },
   "dependencies": {
     "electrobun": "^1.2.1-beta.3",

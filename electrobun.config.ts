@@ -36,6 +36,9 @@ const config: ElectrobunConfig = {
   release: {
     bucketUrl: process.env.ELECTROBUN_BUCKET_URL || "",
   },
+  scripts: {
+    postWrap: "scripts/postWrap.ts",
+  },
 };
 
 export default config;
