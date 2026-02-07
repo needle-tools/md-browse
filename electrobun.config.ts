@@ -21,12 +21,15 @@ const config: ElectrobunConfig = {
       "src/toolbar/index.html": "views/toolbar/index.html",
       "src/toolbar/index.js": "views/toolbar/index.js",
       "src/toolbar/index.css": "views/toolbar/index.css",
-      "src/toolbar/MonaspaceXenonVar.ttf": "views/toolbar/MonaspaceXenonVar.ttf",
+      "src/toolbar/iAWriterDuoV.ttf": "views/toolbar/iAWriterDuoV.ttf",
+      "src/toolbar/iAWriterDuoV-Italic.ttf": "views/toolbar/iAWriterDuoV-Italic.ttf",
+      "src/toolbar/assets": "views/toolbar/assets",
     },
     mac: {
       codesign: true,
       notarize: false,
       bundleCEF: false,
+      icons: "assets/icon.iconset",
     },
   },
 

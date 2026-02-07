@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <style>
+      .bg { fill: #000000; }
+      .text { fill: #f0f0f0; font-family: "iA Writer Duo V", "iA Writer Duo", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif; font-weight: 700; }
+      .sub { fill: #8a8a8a; font-family: "iA Writer Duo V", "iA Writer Duo", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif; font-weight: 400; letter-spacing: 0.08em; }
+    </style>
+  </defs>
+  <rect class="bg" x="64" y="64" width="896" height="896" rx="196" />
+  <text class="text" x="512" y="560" font-size="280" text-anchor="middle" dominant-baseline="middle">mdb</text>
+  <text class="sub" x="512" y="680" font-size="64" text-anchor="middle" dominant-baseline="middle">browser</text>
+</svg>

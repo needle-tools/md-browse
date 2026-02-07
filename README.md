@@ -1,6 +1,6 @@
-# MDBrowse
+# md-browse
 
-A markdown-first browser built with Electrobun. MDBrowse prioritizes markdown content when fetching web pages, and converts HTML to clean markdown for a distraction-free reading experience.
+A markdown-first browser built with Electrobun. md-browse prioritizes markdown content when fetching web pages, and converts HTML to clean markdown for a distraction-free reading experience.
 
 ## Features
 

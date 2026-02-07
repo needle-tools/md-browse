@@ -17,7 +17,6 @@
     setupEventListeners,
   } from "$lib/rpc";
   import { generateMarkdownHtml } from "$lib/markdown";
-  import monaFontUrl from "./assets/MonaspaceXenonVar.ttf?url";
   import "./styles/theme.css";
   import { START_PAGE_URL, START_PAGE_HTML } from "../shared/start-page";
   import type { ViewMode, BrowserSettings } from "$lib/types";
@@ -25,7 +24,8 @@
   const isShim = typeof window !== "undefined" && !(window as unknown as { __electrobunWebviewId?: number }).__electrobunWebviewId;
 
   // Reference to the webview element
-  let contentWebview: HTMLElement & {
+  let contentWebview = $state<
+    (HTMLElement & {
     loadURL: (url: string) => void;
     reload: () => void;
     html: string;
@@ -34,10 +34,11 @@
     canGoForward: () => Promise<boolean>;
     goBack: () => void;
     goForward: () => void;
-  };
+    }) | null
+  >(null);
 
   let urlInput: HTMLInputElement;
-  let contentFrame: HTMLIFrameElement;
+  let contentFrame = $state<HTMLIFrameElement | null>(null);
 
   const viewModeByTab = new Map<number, ViewMode>();
   let lastActiveTabId: number | null = null;
@@ -198,6 +199,14 @@
     }
   }
 
+  function extractNavigationUrl(detail: unknown): string {
+    if (typeof detail === "string") return detail;
+    if (detail && typeof (detail as { url?: unknown }).url === "string") {
+      return (detail as { url: string }).url;
+    }
+    return "";
+  }
+
   // Handle webview/iframe navigation events
   function handleWebviewNavigation(url: string) {
     if (!url || url === "about:blank") return;
@@ -232,6 +241,36 @@
     }
   }
 
+  let attachedWebview: typeof contentWebview = null;
+  function attachWebviewListeners() {
+    if (isShim || !contentWebview || contentWebview === attachedWebview) return;
+    attachedWebview = contentWebview;
+
+    contentWebview.addEventListener("did-start-loading", () => {
+      appStore.setLoading(true);
+    });
+
+    contentWebview.addEventListener("did-stop-loading", () => {
+      appStore.setLoading(false);
+      updateWebviewNavigationState();
+    });
+
+    const navHandler = (e: Event) => {
+      const url = extractNavigationUrl((e as CustomEvent).detail);
+      if (url) handleWebviewNavigation(url);
+    };
+
+    contentWebview.addEventListener("did-navigate", navHandler);
+    contentWebview.addEventListener("did-navigate-in-page", navHandler);
+    contentWebview.addEventListener("did-commit-navigation", navHandler);
+
+    contentWebview.addEventListener("dom-ready", () => {
+      console.log("[Webview] DOM ready");
+      appStore.setLoading(false);
+      updateWebviewNavigationState();
+    });
+  }
+
   // Handle postMessage from iframe (shim mode link interception)
   function handleIframeMessage(event: MessageEvent) {
     if (event.data?.type === "mdbrowse:navigate" && event.data.url) {
@@ -260,6 +299,10 @@
     }
   });
 
+  $effect(() => {
+    attachWebviewListeners();
+  });
+
   // Watch for URL changes and update input
   $effect(() => {
     const url = appStore.currentUrl;
@@ -283,37 +326,7 @@
       window.addEventListener("message", handleIframeMessage);
     }
 
-    // Setup webview event listeners
-    if (!isShim && contentWebview) {
-      contentWebview.addEventListener("did-start-loading", () => {
-        appStore.setLoading(true);
-      });
-
-      contentWebview.addEventListener("did-stop-loading", () => {
-        appStore.setLoading(false);
-        updateWebviewNavigationState();
-      });
-
-      contentWebview.addEventListener("did-navigate", (e: Event) => {
-        const url = (e as CustomEvent).detail;
-        if (typeof url === "string") {
-          handleWebviewNavigation(url);
-        }
-      });
-
-      contentWebview.addEventListener("did-navigate-in-page", (e: Event) => {
-        const url = (e as CustomEvent).detail;
-        if (typeof url === "string") {
-          handleWebviewNavigation(url);
-        }
-      });
-
-      contentWebview.addEventListener("dom-ready", () => {
-        console.log("[Webview] DOM ready");
-        appStore.setLoading(false);
-        updateWebviewNavigationState();
-      });
-    }
+    attachWebviewListeners();
 
     // Load initial tabs
     loadTabs();
@@ -363,18 +376,6 @@
 
 <svelte:window on:keydown={handleKeydown} />
 
-<svelte:head>
-  <style>{`
-    @font-face {
-      font-family: "Monaspace Xenon Var";
-      src: url("${monaFontUrl}") format("truetype");
-      font-weight: 100 900;
-      font-style: normal;
-      font-display: swap;
-    }
-  `}</style>
-</svelte:head>
-
 <div class="app-container">
   <!-- Tab Bar -->
   <div class="tab-bar electrobun-webkit-app-region-drag">
@@ -383,6 +384,12 @@
         class="tab electrobun-webkit-app-region-no-drag"
         class:active={tab.isActive}
         onclick={() => handleTabSwitch(tab.id)}
+        onkeydown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            handleTabSwitch(tab.id);
+          }
+        }}
         role="button"
         tabindex="0"
       >
@@ -390,12 +397,12 @@
           <div class="tab-loading"></div>
         {/if}
         <span class="tab-title">{tab.title || "New Tab"}</span>
-        <span
+        <button
+          type="button"
           class="tab-close electrobun-webkit-app-region-no-drag"
           onclick={(e) => { e.stopPropagation(); closeTab(tab.id); }}
-          role="button"
-          tabindex="0"
-        >×</span>
+          aria-label="Close tab"
+        >×</button>
       </div>
     {/each}
     <button class="new-tab-btn electrobun-webkit-app-region-no-drag" onclick={createNewTab} title="New Tab">+</button>
@@ -478,16 +485,19 @@
     </div>
 
     <div class="settings-toggles electrobun-webkit-app-region-no-drag">
-      <div
+      <button
+        type="button"
         class="setting-toggle electrobun-webkit-app-region-no-drag"
         class:active={appStore.settings.sendAcceptMd}
         onclick={() => applySettings({ sendAcceptMd: !appStore.settings.sendAcceptMd })}
         title="Send Accept: text/markdown header"
+        aria-pressed={appStore.settings.sendAcceptMd}
       >
         <span class="toggle-label">accept: text/markdown</span>
         <div class="toggle-switch"></div>
-      </div>
-      <div
+      </button>
+      <button
+        type="button"
         class="setting-toggle electrobun-webkit-app-region-no-drag"
         class:active={appStore.settings.autoConvert}
         onclick={() => {
@@ -498,10 +508,11 @@
           );
         }}
         title="Auto-convert HTML to Markdown"
+        aria-pressed={appStore.settings.autoConvert}
       >
         <span class="toggle-label">html-to-md</span>
         <div class="toggle-switch"></div>
-      </div>
+      </button>
     </div>
   </div>
 
@@ -551,15 +562,15 @@
   }
 
   :root {
-    --ui-font: "Monaspace Xenon Var", -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, sans-serif;
+    --ui-font: "iA Writer Duo V", -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, sans-serif;
     --bg-primary: #000000;
     --bg-secondary: #000000;
     --bg-toolbar: #000000;
     --bg-input: #000000;
-    --text-primary: #eaeaea;
+    --text-primary: #c5c5c5;
     --text-secondary: #a0a0a0;
     --text-muted: #666680;
-    --accent: #484848;
+    --accent: #7b7b7b;
     --accent-text: #9fbc74;
     --accent-hover: #ffffff;
     --border: #888888;
@@ -775,6 +786,7 @@
     background: var(--accent-text);
     color: black;
     font-weight: 600;
+    font-variation-settings: "wght" 600;
     margin-left: 8px;
     margin-right: 3px;
     display: none;

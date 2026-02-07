@@ -1,7 +1,7 @@
 export const START_PAGE_URL = "mdbrowse://start";
-export const START_PAGE_TITLE = "MDBrowse";
+export const START_PAGE_TITLE = "md-browse";
 
-export const START_PAGE_MARKDOWN = `# MDBrowse
+export const START_PAGE_MARKDOWN = `# md-browse
 
 A markdown-first browser. Choose a destination:
 
@@ -19,7 +19,7 @@ export const START_PAGE_HTML = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8" />
-  <title>MDBrowse</title>
+  <title>md-browse</title>
   <style>
     :root { color-scheme: light dark; }
     body {
@@ -52,7 +52,7 @@ export const START_PAGE_HTML = `<!DOCTYPE html>
   </style>
 </head>
 <body>
-  <h1>MDBrowse</h1>
+  <h1>md-browse</h1>
   <p>A markdown-first browser. Choose a destination:</p>
   <ul>
     <li><a href="https://docs.vercel.com">docs.vercel.com</a></li>
@@ -64,6 +64,8 @@ export const START_PAGE_HTML = `<!DOCTYPE html>
     <li><a href="https://google.com">google.com</a></li>
     <li><a href="https://news.ycombinator.com">news.ycombinator.com</a></li>
   </ul>
+
+  <strong>Test for <em>HTML view mode</em>:</strong> <b>Bold</b> and <i>italic</i> text, <u>underlines</u>, <s>strikethroughs</s>, <code>inline code</code>, and code blocks, <b><i>bold and italic</i></b>
 </body>
 </html>
 `;

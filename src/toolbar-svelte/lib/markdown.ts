@@ -2,6 +2,8 @@
 import { marked } from "marked";
 import type { ParsedFrontmatter } from "./types";
 import themeCss from "../styles/theme.css?raw";
+import iaWriterDuoUrl from "../assets/iAWriterDuoV.ttf?url&inline";
+import iaWriterDuoItalicUrl from "../assets/iAWriterDuoV-Italic.ttf?url&inline";
 
 // Configure marked
 marked.setOptions({
@@ -176,17 +178,35 @@ export function generateMarkdownHtml(markdown: string, rawMode: boolean, baseUrl
     }
   }
 
+  const fontUrl = iaWriterDuoUrl;
+  const fontItalicUrl = iaWriterDuoItalicUrl;
+  const themeCssNoFonts = themeCss.replace(/@font-face[\s\S]*?}\s*/g, "");
+
   return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
   <style>
-    ${themeCss}
+    @font-face {
+      font-family: "iA Writer Duo V";
+      src: url("${fontUrl}") format("truetype");
+      font-weight: 400;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: "iA Writer Duo V";
+      src: url("${fontItalicUrl}") format("truetype");
+      font-weight: 400;
+      font-style: italic;
+      font-display: swap;
+    }
+    ${themeCssNoFonts}
     :root { 
         color-scheme: light dark; 
     }
     body {
-      font-family: var(--ui-font, "Monaspace Xenon Var", -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, sans-serif);
+      font-family: var(--ui-font, "iA Writer Duo V", -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, sans-serif);
       line-height: 1.6;
       max-width: 800px;
       margin: 0 auto;
@@ -194,7 +214,7 @@ export function generateMarkdownHtml(markdown: string, rawMode: boolean, baseUrl
       background: var(--bg-primary);
       color: var(--text-primary);
     }
-    h1, h2, h3, h4 { color: var(--text-primary); margin-top: 1.5em; }
+    h1, h2, h3, h4 { color: var(--text-primary); margin-top: 1.0em; }
     h1 { border-bottom: 2px solid var(--accent); padding-bottom: 0.3em; }
     a { color: var(--accent-text); }
     a:hover { color: var(--accent-2); }
@@ -219,15 +239,22 @@ export function generateMarkdownHtml(markdown: string, rawMode: boolean, baseUrl
       color: var(--text-secondary);
     }
     img { max-width: 100%; height: auto; }
+    h1 img, h2 img, h3 img, h4 img, h5 img, h6 img, a img, p > img { 
+        display: inline-block;
+        max-height: 1.2em;
+        vertical-align: middle;
+    }
     table { border-collapse: collapse; width: 100%; }
     th, td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; }
     th { background: var(--bg-input); }
     .raw-markdown {
       white-space: pre-wrap;
       word-wrap: break-word;
-      font-family: 'SF Mono', Monaco, monospace;
+      font-family: var(--ui-font, "iA Writer Duo V", -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, sans-serif);
       font-size: 14px;
     }
+    em, i { font-style: italic; }
+    strong, b { font-weight: 600; font-variation-settings: "wght" 600; }
     .frontmatter-container {
       background: var(--bg-input);
       border: 1px solid var(--border);

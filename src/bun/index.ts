@@ -87,6 +87,67 @@ function cleanupTurndownOutput(markdown: string): string {
   return markdown.trim();
 }
 
+function isSitemapXml(contentType: string, text: string): boolean {
+  if (!text) return false;
+  const trimmed = text.trim();
+  const isXml =
+    contentType.includes("xml") ||
+    trimmed.startsWith("<?xml") ||
+    trimmed.startsWith("<urlset") ||
+    trimmed.startsWith("<sitemapindex");
+  if (!isXml) return false;
+  return trimmed.includes("http://www.sitemaps.org/schemas/sitemap");
+}
+
+function extractXmlTagValue(block: string, tag: string): string | undefined {
+  const match = block.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, "i"));
+  return match ? match[1].trim() : undefined;
+}
+
+function renderSitemapMarkdown(xml: string, baseUrl: string): { markdown: string; title: string } {
+  const urlBlocks = xml.match(/<url\b[\s\S]*?<\/url>/gi) ?? [];
+  const sitemapBlocks = xml.match(/<sitemap\b[\s\S]*?<\/sitemap>/gi) ?? [];
+  const hostname = (() => {
+    try {
+      return new URL(baseUrl).hostname;
+    } catch {
+      return "";
+    }
+  })();
+
+  const lines: string[] = [];
+  const title = hostname ? `Sitemap - ${hostname}` : "Sitemap";
+  lines.push(`# ${title}`);
+
+  if (urlBlocks.length > 0) {
+    lines.push(`\nFound ${urlBlocks.length} URLs:\n`);
+    for (const block of urlBlocks) {
+      const loc = extractXmlTagValue(block, "loc");
+      if (!loc) continue;
+      const lastmod = extractXmlTagValue(block, "lastmod");
+      const changefreq = extractXmlTagValue(block, "changefreq");
+      const priority = extractXmlTagValue(block, "priority");
+      const meta: string[] = [];
+      if (lastmod) meta.push(`lastmod: ${lastmod}`);
+      if (changefreq) meta.push(`changefreq: ${changefreq}`);
+      if (priority) meta.push(`priority: ${priority}`);
+      lines.push(`- [${loc}](${loc})${meta.length ? ` — ${meta.join(" · ")}` : ""}`);
+    }
+  } else if (sitemapBlocks.length > 0) {
+    lines.push(`\nFound ${sitemapBlocks.length} sitemaps:\n`);
+    for (const block of sitemapBlocks) {
+      const loc = extractXmlTagValue(block, "loc");
+      if (!loc) continue;
+      const lastmod = extractXmlTagValue(block, "lastmod");
+      lines.push(`- [${loc}](${loc})${lastmod ? ` — lastmod: ${lastmod}` : ""}`);
+    }
+  } else {
+    lines.push("\n_No sitemap entries found._\n");
+  }
+
+  return { markdown: lines.join("\n"), title };
+}
+
 function getCharset(contentType: string): string {
   const match = contentType.match(/charset=([^;]+)/i);
   return match ? match[1].trim().replace(/"/g, "").toLowerCase() : "utf-8";
@@ -228,6 +289,17 @@ async function fetchPage(url: string): Promise<PageContent> {
     let markdown = "";
     let rawHtml = "";
     
+    if (isSitemapXml(contentType, text)) {
+      const { markdown: sitemapMarkdown, title: sitemapTitle } = renderSitemapMarkdown(text, finalUrl);
+      return {
+        url: finalUrl,
+        markdown: sitemapMarkdown,
+        rawHtml: "",
+        title: sitemapTitle,
+        wasMarkdown: true,
+      };
+    }
+
     // Check if response is markdown
     if (contentType.includes("text/markdown") || 
         contentType.includes("text/x-markdown") ||
