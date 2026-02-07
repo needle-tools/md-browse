@@ -23,7 +23,6 @@ const config: ElectrobunConfig = {
       "src/toolbar/index.css": "views/toolbar/index.css",
       "src/toolbar/iAWriterDuoV.ttf": "views/toolbar/iAWriterDuoV.ttf",
       "src/toolbar/iAWriterDuoV-Italic.ttf": "views/toolbar/iAWriterDuoV-Italic.ttf",
-      "src/toolbar/assets": "views/toolbar/assets",
     },
     mac: {
       codesign: true,

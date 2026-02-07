@@ -906,7 +906,6 @@
             }
           }}
         />
-        <span class="search-count">{searchCount ? `${searchIndex}/${searchCount}` : "0/0"}</span>
         <div class="search-nav">
           <button class="search-btn" title="Previous" onclick={() => runSearch("prev")}>↑</button>
           <button class="search-btn" title="Next" onclick={() => runSearch("next")}>↓</button>
@@ -1317,13 +1316,6 @@
   .search-modal .search-btn:hover {
     background: var(--tab-hover);
     color: var(--text-primary);
-  }
-
-  .search-modal .search-count {
-    font-size: 10px;
-    color: var(--text-secondary);
-    min-width: 60px;
-    text-align: center;
   }
 
   .search-modal .search-close {
