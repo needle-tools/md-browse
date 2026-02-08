@@ -1,11 +1,12 @@
-# md-browse
+# `md-browse`
 
-A markdown-first browser built with Electrobun. md-browse prioritizes markdown content when fetching web pages, and converts HTML to clean markdown for a distraction-free reading experience.
+A markdown-first browser built with Electrobun. md-browse prioritizes markdown content when fetching web pages, and converts HTML to clean markdown similar to what AI tools do.
 
 ## Features
 
 - **Markdown-First**: Sends `Accept: text/markdown` headers first to get native markdown when available
-- **HTML to Markdown**: Automatically converts HTML pages to clean, readable markdown using Turndown
+
+- **HTML to Markdown**: Automatically converts HTML pages to clean, readable markdown using Turndown, tuned to match what AIs see
 - **Dual View Mode**: Toggle between raw markdown view and rendered preview
 - **Tab Support**: Multiple tabs with full navigation history (back/forward)
 - **Clean Design**: Dark, modern UI focused on readability
@@ -24,14 +25,17 @@ A markdown-first browser built with Electrobun. md-browse prioritizes markdown c
 bun install
 
 # Run in development mode
-bun start
+bun run start
 ```
 
 ### Build
 
 ```bash
-# Build the application
+# Build the application (current platform)
 bun run build
+
+# Build Windows x64 artifacts
+bun run build:stable:win
 ```
 
 ## Architecture
@@ -44,7 +48,7 @@ The app consists of:
   - Tab and navigation state management
   - RPC communication with the view
 
-- **Toolbar View** (`src/toolbar/`): Single view containing:
+- **Toolbar View** (`src/toolbar-svelte/` → compiled to `src/toolbar/`): Single view containing:
   - Tab bar for managing multiple tabs
   - Navigation controls (back, forward, reload)
   - URL input bar
@@ -60,7 +64,3 @@ The app consists of:
    - Extracts main content from `<main>` or `<article>` tags
    - Converts headings, links, lists, code blocks, etc.
 4. Toggle between "Markdown" (raw) and "Preview" (rendered) views
-
-## License
-
-MIT

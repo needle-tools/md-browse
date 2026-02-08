@@ -115,30 +115,32 @@ function sendShortcutToToolbar(action: "search" | "focus-url" | "close-search") 
   `);
 }
 
-function setAppMenu() {
-  ApplicationMenu.setApplicationMenu([
-    {
-      submenu: [{ label: "Quit", role: "quit" }],
-    },
-    {
-      label: "Edit",
-      submenu: [
-        { role: "undo" },
-        { role: "redo" },
-        { type: "separator" },
-        { role: "cut" },
-        { role: "copy" },
-        { role: "paste" },
-        { role: "pasteAndMatchStyle" },
-        { role: "delete" },
-        { role: "selectAll" },
-        { type: "separator" },
-        { label: "Find in Page", action: "find-in-page" },
-        { label: "Focus Address Bar", action: "focus-address-bar" },
-      ],
-    },
-  ]);
-}
+ApplicationMenu.setApplicationMenu([
+  {
+    submenu: [{ label: "Quit", role: "quit" }],
+  },
+  {
+    label: "Edit",
+    submenu: [
+      { role: "undo" },
+      { role: "redo" },
+      { type: "separator" },
+      { role: "cut" },
+      { role: "copy" },
+      { role: "paste" },
+      { role: "pasteAndMatchStyle" },
+      { role: "delete" },
+      { role: "selectAll" },
+    ],
+  },
+  {
+    label: "View",
+    submenu: [
+      { label: "Find in Page", action: "find-in-page" },
+      { label: "Focus Address Bar", action: "focus-address-bar" },
+    ],
+  },
+]);
 
 // Get the active tab
 function getActiveTab(): Tab | undefined {
@@ -772,8 +774,6 @@ mainWindow = new BrowserWindow({
 });
 
 console.log("[MDBrowse] Window created");
-
-setAppMenu();
 
 // Listen for custom application menu actions
 Electrobun.events.on("application-menu-clicked", (e: any) => {

@@ -26,11 +26,13 @@
   // Preload script for the content webview: forwards keyboard shortcuts to the host
   const contentPreload = [
     "document.addEventListener('keydown', function(e) {",
-    "if ((e.metaKey || e.ctrlKey) && (e.key === 'f' || e.key === 'l')) {",
+    "var isAccel = e.metaKey || e.ctrlKey;",
+    "var key = (e.key || '').toLowerCase();",
+    "if (isAccel && (key === 'f' || key === 'l')) {",
     "e.preventDefault();",
-    "if (window.__electrobunSendToHost) window.__electrobunSendToHost({ type: 'shortcut', action: e.key === 'f' ? 'search' : 'focus-url' });",
+    "if (window.__electrobunSendToHost) window.__electrobunSendToHost({ type: 'shortcut', action: key === 'f' ? 'search' : 'focus-url' });",
     "}",
-    "if (e.key === 'Escape') {",
+    "if (key === 'escape') {",
     "if (window.__electrobunSendToHost) window.__electrobunSendToHost({ type: 'shortcut', action: 'close-search' });",
     "}",
     "});"
