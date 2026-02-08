@@ -8,6 +8,7 @@ For pages that respect `Accept: text/markdown` headers, it directly displays tha
 
 
 For regular HTML, it passes the page through `turndown` with settings that aim to match what Copilot, Claude etc. do:  
+
 <img width="1060" height="762" alt="Screenshot 2026-02-08 at 01 55 37" src="https://github.com/user-attachments/assets/87c4d883-2123-44b8-b32b-c68268d0948a" />
 
 
