@@ -239,8 +239,7 @@ async function shimFetchPage(url: string): Promise<PageContent> {
         .replace(/<iframe[\s\S]*?<\/iframe>/gi, "")
         .replace(/<a[^>]*>\s*<\/a>/gi, "");
 
-      const mainMatch = cleanHtml.match(/<main[\s\S]*?>([\s\S]*?)<\/main>/i) ||
-        cleanHtml.match(/<article[\s\S]*?>([\s\S]*?)<\/article>/i);
+      const mainMatch = cleanHtml.match(/<main[\s\S]*?>([\s\S]*?)<\/main>/i);
       if (mainMatch) {
         cleanHtml = mainMatch[1];
       } else {
@@ -687,4 +686,31 @@ function handleContentReceived(content: PageContent): void {
   if (content.wasMarkdown && appStore.viewMode === "html") {
     appStore.setViewMode("preview");
   }
+}
+
+export function downloadMarkdown(): boolean {
+  const content = appStore.currentContent;
+  if (!content?.markdown) return false;
+
+  let filename = "page.md";
+  try {
+    if (content.url) {
+      const url = new URL(content.url);
+      const pathPart = url.pathname.replace(/\//g, "-").replace(/^-|-$/g, "") || url.hostname;
+      filename = `${pathPart}.md`;
+    } else if (content.title) {
+      filename = `${content.title.replace(/[^a-z0-9]/gi, "-").toLowerCase()}.md`;
+    }
+  } catch {}
+
+  const blob = new Blob([content.markdown], { type: "text/markdown;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+  return true;
 }
