@@ -2,6 +2,15 @@
 
 A markdown-first browser built with Electrobun. md-browse prioritizes markdown content when fetching web pages, and converts HTML to clean markdown similar to what AI tools do.
 
+For pages that respect `Accept: text/markdown` headers, it directly displays that data, like the Vercel docs:  
+
+<img width="1060" height="765" alt="Screenshot 2026-02-08 at 01 55 16" src="https://github.com/user-attachments/assets/1e8510a4-3449-48cb-9585-327ad80c2e4a" />
+
+
+For regular HTML, it passes the page through `turndown` with settings that aim to match what Copilot, Claude etc. do:  
+<img width="1060" height="762" alt="Screenshot 2026-02-08 at 01 55 37" src="https://github.com/user-attachments/assets/87c4d883-2123-44b8-b32b-c68268d0948a" />
+
+
 ## Features
 
 - **Markdown-First**: Sends `Accept: text/markdown` headers first to get native markdown when available
