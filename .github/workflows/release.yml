@@ -51,6 +51,31 @@ jobs:
       - name: Install dependencies
         run: bun install
 
+      - name: Install Linux dependencies
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libfuse2
+
+      - name: Validate macOS signing secrets
+        if: matrix.platform == 'macos'
+        shell: bash
+        env:
+          ELECTROBUN_DEVELOPER_ID: ${{ secrets.ELECTROBUN_DEVELOPER_ID }}
+          ELECTROBUN_APPLEID: ${{ secrets.ELECTROBUN_APPLEID }}
+          ELECTROBUN_APPLEIDPASS: ${{ secrets.ELECTROBUN_APPLEIDPASS }}
+          ELECTROBUN_TEAMID: ${{ secrets.ELECTROBUN_TEAMID }}
+        run: |
+          missing=()
+          [[ -z "$ELECTROBUN_DEVELOPER_ID" ]] && missing+=("ELECTROBUN_DEVELOPER_ID")
+          [[ -z "$ELECTROBUN_APPLEID" ]] && missing+=("ELECTROBUN_APPLEID")
+          [[ -z "$ELECTROBUN_APPLEIDPASS" ]] && missing+=("ELECTROBUN_APPLEIDPASS")
+          [[ -z "$ELECTROBUN_TEAMID" ]] && missing+=("ELECTROBUN_TEAMID")
+          if (( ${#missing[@]} )); then
+            echo "Missing required macOS signing secrets: ${missing[*]}" >&2
+            exit 1
+          fi
+
       - name: Build
         run: ${{ matrix.build_cmd }}
         env:

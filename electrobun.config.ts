@@ -30,6 +30,9 @@ const config: ElectrobunConfig = {
       bundleCEF: false,
       icons: "assets/icon.iconset",
     },
+    linux: {
+      bundleCEF: true,
+    }
   },
 
   release: {
