@@ -32,6 +32,9 @@ const config: ElectrobunConfig = {
     },
     linux: {
       bundleCEF: true,
+      // AppImage tooling expects the icon name to match the desktop file's `Icon=`
+      // (Electrobun will copy this file to build/.../md-browse.AppDir/md-browse.png)
+      icon: "assets/icon-1024.png",
     },
   },
 

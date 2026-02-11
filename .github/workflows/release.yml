@@ -55,7 +55,21 @@ jobs:
         if: matrix.platform == 'linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libfuse2
+          sudo apt-get install -y libfuse2 librsvg2-bin
+
+      - name: Ensure Linux icon exists (AppImage)
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          # Electrobun expects config.build.linux.icon to exist at build time.
+          # appimagetool then expects md-browse.{png,svg,xpm} inside the AppDir.
+          if [[ ! -s "assets/icon-1024.png" ]]; then
+            echo "assets/icon-1024.png missing; generating from assets/icon.svg"
+            rsvg-convert -w 1024 -h 1024 assets/icon.svg -o assets/icon-1024.png
+          fi
+          echo "Icon file details:"
+          ls -la assets/icon-1024.png
+          file assets/icon-1024.png
 
       - name: Validate macOS signing secrets
         if: matrix.platform == 'macos'
@@ -106,6 +120,38 @@ jobs:
           ELECTROBUN_APPLEID: ${{ secrets.ELECTROBUN_APPLEID }}
           ELECTROBUN_APPLEIDPASS: ${{ secrets.ELECTROBUN_APPLEIDPASS }}
           ELECTROBUN_TEAMID: ${{ secrets.ELECTROBUN_TEAMID }}
+
+      - name: Debug Linux AppImage icon paths
+        if: always() && matrix.platform == 'linux'
+        shell: bash
+        run: |
+          set -euxo pipefail
+          echo "PWD: $(pwd)"
+          echo "Repo icon source (as configured):"
+          ls -la assets || true
+          ls -la assets/icon-1024.png || true
+          file assets/icon-1024.png || true
+
+          echo "Electrobun config linux icon line:"
+          grep -n "linux:" -n electrobun.config.ts || true
+          grep -n "icon:" electrobun.config.ts || true
+
+          echo "Build folder summary:"
+          find build -maxdepth 3 -type d -print | sort || true
+
+          echo "AppDir check (expected): build/stable-linux-x64/md-browse.AppDir"
+          if [[ -d build/stable-linux-x64/md-browse.AppDir ]]; then
+            ls -la build/stable-linux-x64/md-browse.AppDir || true
+            echo "Desktop file:"
+            cat build/stable-linux-x64/md-browse.AppDir/md-browse.desktop || true
+            echo "Icon files in AppDir root:"
+            ls -la build/stable-linux-x64/md-browse.AppDir/md-browse.* || true
+            echo "All png/svg/xpm in AppDir:"
+            find build/stable-linux-x64/md-browse.AppDir -maxdepth 2 -type f \( -name "*.png" -o -name "*.svg" -o -name "*.xpm" \) -print | sort || true
+          else
+            echo "AppDir not found; listing build/stable-linux-x64:"
+            ls -la build/stable-linux-x64 || true
+          fi
 
       - name: Collect artifacts
         shell: bash
