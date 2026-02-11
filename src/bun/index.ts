@@ -291,9 +291,7 @@ async function fetchPage(url: string): Promise<PageContent> {
           .replace(/<iframe[\s\S]*?<\/iframe>/gi, "")
           .replace(/<a[^>]*>\s*<\/a>/gi, "");
         
-        // If there's a main or article tag, use that
-        const mainMatch = cleanHtml.match(/<main[\s\S]*?>([\s\S]*?)<\/main>/i) ||
-                          cleanHtml.match(/<article[\s\S]*?>([\s\S]*?)<\/article>/i);
+        const mainMatch = cleanHtml.match(/<main[\s\S]*?>([\s\S]*?)<\/main>/i);
         if (mainMatch) {
           cleanHtml = mainMatch[1];
         } else {
@@ -658,7 +656,7 @@ const mainRPC = BrowserView.defineRPC<ToolbarRPCType>({
         settings = { ...settings, ...newSettings };
         
         // Check if any setting that requires refresh changed
-        const needsRefresh = 
+        const needsRefresh =
           oldSettings.sendAcceptMd !== settings.sendAcceptMd ||
           oldSettings.autoConvert !== settings.autoConvert ||
           oldSettings.allowJavascript !== settings.allowJavascript;
@@ -674,12 +672,13 @@ const mainRPC = BrowserView.defineRPC<ToolbarRPCType>({
         if (!tab || !tab.url) {
           return { success: false };
         }
-        
+
         tab.isLoading = true;
         sendNavigationState();
         sendLoadingStarted(tab.url);
-        
+
         const content = await fetchPage(tab.url);
+        tab.url = content.url; // Update URL in case of redirects
         tab.title = content.title;
         tab.content = content;
         tab.isLoading = false;

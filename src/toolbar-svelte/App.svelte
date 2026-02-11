@@ -15,6 +15,7 @@
     notifyWebviewNavigation,
     fetchForViewModeSwitch,
     setupEventListeners,
+    downloadMarkdown,
   } from "$lib/rpc";
   import { generateMarkdownHtml } from "$lib/markdown";
   import "./styles/theme.css";
@@ -23,7 +24,7 @@
 
   const isShim = typeof window !== "undefined" && !(window as unknown as { __electrobunWebviewId?: number }).__electrobunWebviewId;
 
-  // Preload script for the content webview: forwards keyboard shortcuts to the host
+  // Preload script: keyboard shortcuts + SPA URL tracking
   const contentPreload = [
     "document.addEventListener('keydown', function(e) {",
     "var isAccel = e.metaKey || e.ctrlKey;",
@@ -35,7 +36,22 @@
     "if (key === 'escape') {",
     "if (window.__electrobunSendToHost) window.__electrobunSendToHost({ type: 'shortcut', action: 'close-search' });",
     "}",
-    "});"
+    "});",
+    "(function() {",
+    "var lastUrl = location.href;",
+    "function checkUrl() {",
+    "if (location.href !== lastUrl) {",
+    "lastUrl = location.href;",
+    "if (window.__electrobunSendToHost) window.__electrobunSendToHost({ type: 'url-change', url: location.href });",
+    "}",
+    "}",
+    "var origPush = history.pushState;",
+    "var origReplace = history.replaceState;",
+    "history.pushState = function() { origPush.apply(this, arguments); checkUrl(); };",
+    "history.replaceState = function() { origReplace.apply(this, arguments); checkUrl(); };",
+    "window.addEventListener('popstate', checkUrl);",
+    "setInterval(checkUrl, 500);",
+    "})();"
   ].join(" ");
 
   // Reference to the webview element
@@ -64,6 +80,10 @@
 
   const viewModeByTab = new Map<number, ViewMode>();
   let lastActiveTabId: number | null = null;
+
+  // Tab drag and drop state
+  let draggedTabId = $state<number | null>(null);
+  let dragOverTabId = $state<number | null>(null);
 
   function getActiveTabId(): number | null {
     return appStore.tabs.find((t) => t.isActive)?.id ?? null;
@@ -404,6 +424,49 @@
     }
   }
 
+  // Tab drag and drop handlers
+  function handleTabDragStart(e: DragEvent, tabId: number) {
+    draggedTabId = tabId;
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", String(tabId));
+    }
+  }
+
+  function handleTabDragOver(e: DragEvent, tabId: number) {
+    e.preventDefault();
+    if (draggedTabId !== null && draggedTabId !== tabId) {
+      dragOverTabId = tabId;
+    }
+  }
+
+  function handleTabDragLeave() {
+    dragOverTabId = null;
+  }
+
+  function handleTabDrop(e: DragEvent, targetTabId: number) {
+    e.preventDefault();
+    if (draggedTabId !== null && draggedTabId !== targetTabId) {
+      // Reorder tabs locally
+      const tabs = [...appStore.tabs];
+      const draggedIndex = tabs.findIndex(t => t.id === draggedTabId);
+      const targetIndex = tabs.findIndex(t => t.id === targetTabId);
+
+      if (draggedIndex !== -1 && targetIndex !== -1) {
+        const [draggedTab] = tabs.splice(draggedIndex, 1);
+        tabs.splice(targetIndex, 0, draggedTab);
+        appStore.setTabs(tabs);
+      }
+    }
+    draggedTabId = null;
+    dragOverTabId = null;
+  }
+
+  function handleTabDragEnd() {
+    draggedTabId = null;
+    dragOverTabId = null;
+  }
+
   async function handleTabSwitch(tabId: number) {
     const currentActiveId = getActiveTabId();
     if (currentActiveId !== null) {
@@ -560,13 +623,15 @@
       updateWebviewNavigationState();
     });
 
-    // Listen for keyboard shortcuts forwarded from the content webview's preload
+    // Listen for messages forwarded from the content webview's preload
     contentWebview.on?.("host-message", (event: any) => {
       const msg = event?.detail;
       if (msg?.type === "shortcut") {
         if (msg.action === "search") appStore.toggleSearch();
         else if (msg.action === "focus-url") { urlInput?.focus(); urlInput?.select(); }
         else if (msg.action === "close-search") appStore.closeSearch();
+      } else if (msg?.type === "url-change" && msg.url) {
+        handleWebviewNavigation(msg.url);
       }
     });
   }
@@ -732,9 +797,19 @@
       e.preventDefault();
       handleReload();
     }
-    if ((e.metaKey || e.ctrlKey) && e.key === "t") {
+    if ((e.metaKey || e.ctrlKey) && (e.key === "t" || e.key === "n")) {
       e.preventDefault();
-      createNewTab();
+      createNewTab().then(() => {
+        urlInput?.focus();
+        urlInput?.select();
+      });
+    }
+    if ((e.metaKey || e.ctrlKey) && e.key === "w") {
+      e.preventDefault();
+      const activeTab = appStore.tabs.find(t => t.isActive);
+      if (activeTab) {
+        closeTab(activeTab.id);
+      }
     }
     if ((e.metaKey || e.ctrlKey) && e.key === "f") {
       e.preventDefault();
@@ -755,7 +830,15 @@
       <div
         class="tab electrobun-webkit-app-region-no-drag"
         class:active={tab.isActive}
+        class:dragging={draggedTabId === tab.id}
+        class:drag-over={dragOverTabId === tab.id}
+        draggable="true"
         onclick={() => handleTabSwitch(tab.id)}
+        ondragstart={(e) => handleTabDragStart(e, tab.id)}
+        ondragover={(e) => handleTabDragOver(e, tab.id)}
+        ondragleave={handleTabDragLeave}
+        ondrop={(e) => handleTabDrop(e, tab.id)}
+        ondragend={handleTabDragEnd}
         onkeydown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
@@ -886,6 +969,12 @@
         <span class="toggle-label">html-to-md</span>
         <div class="toggle-switch"></div>
       </button>
+      <button
+        class="download-btn electrobun-webkit-app-region-no-drag"
+        disabled={!appStore.currentContent?.markdown}
+        onclick={() => downloadMarkdown()}
+        title="Download Markdown"
+      >↓</button>
     </div>
     {/if}
 
@@ -1025,6 +1114,14 @@
     border: 1px solid var(--border);
     border-bottom: 0;
     color: var(--text-primary);
+  }
+
+  .tab.dragging {
+    opacity: 0.5;
+  }
+
+  .tab.drag-over {
+    border-left: 2px solid var(--accent-text);
   }
 
   .tab-title {
@@ -1215,6 +1312,33 @@
 
   .view-toggle-btn:hover:not(.active) {
     color: var(--text-primary);
+  }
+
+  /* Download button */
+  .download-btn {
+    width: 32px;
+    height: 32px;
+    border: 1px solid var(--border);
+    background: var(--bg-input);
+    color: var(--text-secondary);
+    font-size: 14px;
+    cursor: pointer;
+    border-radius: var(--border-radius);
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .download-btn:hover:not(:disabled) {
+    background: var(--accent-text);
+    color: #1a1a2e;
+    border-color: var(--accent-text);
+  }
+
+  .download-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
   }
 
   /* Settings toggles */
