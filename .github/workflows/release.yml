@@ -55,17 +55,7 @@ jobs:
         if: matrix.platform == 'linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libfuse2 librsvg2-bin
-
-      - name: Ensure Linux app icon
-        if: matrix.platform == 'linux'
-        shell: bash
-        run: |
-          if [[ ! -s "assets/icon-1024.png" ]]; then
-            echo "assets/icon-1024.png missing; generating from assets/icon.svg"
-            rsvg-convert -w 1024 -h 1024 assets/icon.svg -o assets/icon-1024.png
-          fi
-          ls -l assets/icon-1024.png
+          sudo apt-get install -y libfuse2
 
       - name: Validate macOS signing secrets
         if: matrix.platform == 'macos'

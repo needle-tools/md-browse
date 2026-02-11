@@ -26,13 +26,13 @@ const config: ElectrobunConfig = {
     },
     mac: {
       codesign: true,
-      notarize: false,
+      notarize: true,
       bundleCEF: false,
       icons: "assets/icon.iconset",
     },
     linux: {
       bundleCEF: true,
-      icon: "assets/icon-1024.png",
+      icon: "assets/icon.svg",
     },
   },
 
