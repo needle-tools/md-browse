@@ -113,13 +113,63 @@ jobs:
           security find-identity -v -p codesigning build.keychain
           rm certificate.p12
 
-      - name: Build
+      - name: Build (macOS/Windows)
+        if: matrix.platform != 'linux'
         run: ${{ matrix.build_cmd }}
         env:
           ELECTROBUN_DEVELOPER_ID: ${{ secrets.ELECTROBUN_DEVELOPER_ID }}
           ELECTROBUN_APPLEID: ${{ secrets.ELECTROBUN_APPLEID }}
           ELECTROBUN_APPLEIDPASS: ${{ secrets.ELECTROBUN_APPLEIDPASS }}
           ELECTROBUN_TEAMID: ${{ secrets.ELECTROBUN_TEAMID }}
+
+      - name: Build (Linux)
+        if: matrix.platform == 'linux'
+        run: ${{ matrix.build_cmd }}
+        continue-on-error: true
+        env:
+          ELECTROBUN_DEVELOPER_ID: ${{ secrets.ELECTROBUN_DEVELOPER_ID }}
+          ELECTROBUN_APPLEID: ${{ secrets.ELECTROBUN_APPLEID }}
+          ELECTROBUN_APPLEIDPASS: ${{ secrets.ELECTROBUN_APPLEIDPASS }}
+          ELECTROBUN_TEAMID: ${{ secrets.ELECTROBUN_TEAMID }}
+
+      - name: Recover Linux AppImage icon + rerun appimagetool
+        if: always() && matrix.platform == 'linux'
+        shell: bash
+        run: |
+          set -euxo pipefail
+          BUILD_DIR="build/stable-linux-x64"
+          APPIMAGE_PATH="$BUILD_DIR/md-browse.AppImage"
+          APPDIR_PATH="$BUILD_DIR/md-browse.AppDir"
+
+          # If Electrobun already produced an AppImage, nothing to do.
+          if [[ -f "$APPIMAGE_PATH" ]]; then
+            echo "AppImage already exists: $APPIMAGE_PATH"
+            exit 0
+          fi
+
+          # If the build did not get far enough to create the AppDir, fail.
+          if [[ ! -d "$APPDIR_PATH" ]]; then
+            echo "AppDir not found at $APPDIR_PATH" >&2
+            exit 1
+          fi
+
+          # Ensure the icon exists where appimagetool expects it (AppDir root).
+          if [[ ! -f "$APPDIR_PATH/md-browse.png" ]]; then
+            echo "Injecting missing AppDir icon: md-browse.png"
+            cp -f assets/icon-1024.png "$APPDIR_PATH/md-browse.png"
+            cp -f assets/icon-1024.png "$APPDIR_PATH/.DirIcon" || true
+          fi
+
+          # Re-run appimagetool (Electrobun installs it to /usr/local/bin/appimagetool).
+          command -v appimagetool
+          ARCH=x86_64 appimagetool --no-appstream "$APPDIR_PATH" "$APPIMAGE_PATH"
+
+      - name: Verify Linux artifacts exist
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          set -euxo pipefail
+          test -f build/stable-linux-x64/md-browse.AppImage
 
       - name: Debug Linux AppImage icon paths
         if: always() && matrix.platform == 'linux'
@@ -161,6 +211,7 @@ jobs:
             -name "*.dmg" -o \
             -name "*.zip" -o \
             -name "*.tar.zst" -o \
+            -name "*.AppImage" -o \
             -name "*.exe" -o \
             -name "*update.json" \
           \) -print -exec cp -f {} artifacts/ \;
