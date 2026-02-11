@@ -16,3 +16,4 @@ src/toolbar/
 # Logs
 *.log
 artifacts/
+video/
